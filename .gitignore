@@ -1,24 +1,15 @@
 # ========================
-# 内部文档（不进仓库）
-# ========================
-_internal/
-
-# ========================
 # 排除的子项目（独立仓库）
 # ========================
 openclaw/
 vibecraft/
 
 # ========================
-# EE 模块（私有仓库，不纳入 CE 开源仓库）
-# ========================
-ee/
-
-# ========================
 # 环境 & 密钥
 # ========================
 .env
-.env.*
+.env.local
+.env.*.local
 
 # ========================
 # Python / 后端
@@ -68,7 +59,3 @@ Thumbs.db
 *.db
 *.sqlite3
 data/
-scripts/git_stats/code_lines.png
-scripts/git_stats/commit_counts.png
-scripts/git_stats/code_breakdown.png
-scripts/git_stats/total_lines.png
