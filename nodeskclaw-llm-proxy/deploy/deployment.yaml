@@ -20,7 +20,7 @@ spec:
       containers:
         # LLM Proxy
         - name: llm-proxy
-          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-llm-proxy:20260221-ed29c25
+          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-llm-proxy:20260222-c84653a
           ports:
             - containerPort: 8080
           env:

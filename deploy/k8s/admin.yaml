@@ -19,7 +19,7 @@ spec:
         - name: cr-pull-secret
       containers:
         - name: nodeskclaw-admin
-          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-admin:latest
+          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-admin:20260227-ab67cbf
           ports:
             - containerPort: 80
           resources:

@@ -19,7 +19,7 @@ spec:
         - name: cr-pull-secret
       containers:
         - name: nodeskclaw-portal
-          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-portal:latest
+          image: <YOUR_REGISTRY>/<YOUR_NAMESPACE>/nodeskclaw-portal:20260227-ab67cbf
           ports:
             - containerPort: 80
           resources:
