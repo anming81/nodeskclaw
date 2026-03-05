@@ -13,8 +13,10 @@ import GlowCard from '@/components/GlowCard.vue'
 import StatusDot from '@/components/StatusDot.vue'
 import { Box, Trash2, Eye, Rocket, Search, LayoutGrid, List } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import { useConfirm } from '@/composables/useConfirm'
 
 const router = useRouter()
+const { confirm } = useConfirm()
 const { t, te } = useI18n()
 const instanceStore = useInstanceStore()
 const clusterStore = useClusterStore()
@@ -94,7 +96,13 @@ async function handleDelete(inst: InstanceInfo) {
     toast.error(t('instancesPage.cannotDeleteInWorkspace', { workspace: inst.workspace_name ?? '' }))
     return
   }
-  if (!confirm(t('instancesPage.deleteConfirm', { name: inst.name }))) return
+  const ok = await confirm({
+    title: t('instancesPage.deleteTitle'),
+    description: t('instancesPage.deleteConfirm', { name: inst.name }),
+    variant: 'danger',
+    confirmText: t('common.delete'),
+  })
+  if (!ok) return
   try {
     await instanceStore.deleteInstance(inst.id)
     toast.success(t('instancesPage.deleteSuccess'))

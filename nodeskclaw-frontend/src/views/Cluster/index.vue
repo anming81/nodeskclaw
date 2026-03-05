@@ -12,8 +12,10 @@ import StatusDot from '@/components/StatusDot.vue'
 import { Plus, Trash2, Plug, Server, Pencil } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { resolveApiErrorMessage } from '@/i18n/error'
+import { useConfirm } from '@/composables/useConfirm'
 
 const router = useRouter()
+const { confirm } = useConfirm()
 const clusterStore = useClusterStore()
 
 const showAddDialog = ref(false)
@@ -102,7 +104,13 @@ async function handleTest(id: string) {
 }
 
 async function handleDelete(id: string, name: string) {
-  if (!confirm(`确定删除集群 "${name}"？`)) return
+  const ok = await confirm({
+    title: '删除集群',
+    description: `确定删除集群「${name}」？`,
+    variant: 'danger',
+    confirmText: '删除',
+  })
+  if (!ok) return
   try {
     await clusterStore.deleteCluster(id)
     toast.success('集群已删除')

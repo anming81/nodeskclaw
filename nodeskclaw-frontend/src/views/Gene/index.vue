@@ -50,8 +50,11 @@ import {
   RefreshCw,
 } from 'lucide-vue-next'
 
+import { useConfirm } from '@/composables/useConfirm'
+
 const store = useGeneStore()
 const notify = useNotify()
+const { confirm } = useConfirm()
 const activeTab = ref('overview')
 
 const geneKeyword = ref('')
@@ -223,7 +226,13 @@ async function saveGene() {
 }
 
 async function handleDeleteGene(gene: GeneItem) {
-  if (!confirm(`确认删除基因「${gene.name}」?`)) return
+  const ok = await confirm({
+    title: '删除基因',
+    description: `确认删除基因「${gene.name}」？`,
+    variant: 'danger',
+    confirmText: '删除',
+  })
+  if (!ok) return
   try {
     await store.deleteGene(gene.id)
     notify.success('基因已删除')
@@ -295,7 +304,13 @@ async function saveGenome() {
 }
 
 async function handleDeleteGenome(genome: GenomeItem) {
-  if (!confirm(`确认删除基因组「${genome.name}」?`)) return
+  const ok = await confirm({
+    title: '删除基因组',
+    description: `确认删除基因组「${genome.name}」？`,
+    variant: 'danger',
+    confirmText: '删除',
+  })
+  if (!ok) return
   try {
     await store.deleteGenome(genome.id)
     notify.success('基因组已删除')

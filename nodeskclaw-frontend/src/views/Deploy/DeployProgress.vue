@@ -10,9 +10,11 @@ import {
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import api, { API_BASE } from '@/services/api'
 import { toast } from 'vue-sonner'
+import { useConfirm } from '@/composables/useConfirm'
 
 const route = useRoute()
 const router = useRouter()
+const { confirm } = useConfirm()
 
 const deployId = route.params.deployId as string
 const instanceName = (route.query.name as string) || ''
@@ -155,7 +157,13 @@ onUnmounted(() => {
 const cancelling = ref(false)
 
 async function handleCancel() {
-  if (!confirm('确定要停止部署吗？这将立即清除命名空间和所有已创建的资源。')) return
+  const ok = await confirm({
+    title: '停止部署',
+    description: '确定要停止部署吗？这将立即清除命名空间和所有已创建的资源。',
+    variant: 'danger',
+    confirmText: '停止',
+  })
+  if (!ok) return
   cancelling.value = true
   try {
     const res = await api.post(`/deploy/${deployId}/cancel`)

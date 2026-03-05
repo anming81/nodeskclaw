@@ -13,6 +13,7 @@ import { useTokenAlert } from '@/composables/useTokenAlert'
 import { usePermissions } from '@/composables/usePermissions'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import LocaleSelect from '@/components/shared/LocaleSelect.vue'
+import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import {
   LayoutGrid,
   Box,
@@ -341,5 +342,7 @@ const sseStatusText = computed(() => {
     <Toaster position="top-right" :theme="'dark'" />
     <!-- Notify -->
     <Notify />
+    <!-- Confirm Dialog -->
+    <ConfirmDialog />
   </template>
 </template>
