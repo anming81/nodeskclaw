@@ -14,12 +14,15 @@ const hasEE = fs.existsSync(eePortalDir)
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    alias: [
       ...(hasEE
-        ? { '@/router/ee-stub': path.resolve(eePortalDir, 'routes') }
-        : {}),
-    },
+        ? [{ find: '@/router/ee-stub', replacement: path.resolve(eePortalDir, 'routes') }]
+        : []),
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+    ],
+    dedupe: hasEE
+      ? ['vue', 'vue-router', 'vue-i18n', 'pinia', 'lucide-vue-next', '@vueuse/core']
+      : [],
   },
   server: {
     port: 5174,
