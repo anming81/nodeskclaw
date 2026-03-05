@@ -206,12 +206,12 @@ watch(isRegister, () => { error.value = '' })
               {{ t('auth.accountPasswordLogin') }}
             </button>
             <button
-              disabled
-              class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium transition-all text-muted-foreground/50 cursor-not-allowed"
+              class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium transition-all"
+              :class="activeTab === 'code' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'"
+              @click="activeTab = 'code'"
             >
               <MessageSquareCode class="w-4 h-4" />
               {{ t('auth.verificationCodeLogin') }}
-              <span class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground leading-none">{{ t('common.comingSoon') }}</span>
             </button>
           </div>
 
