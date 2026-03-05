@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useOrgStore } from '@/stores/org'
 import { Settings, Users, Dna, Mail } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const orgStore = useOrgStore()
 
-const navItems = [
+const allNavItems = [
   { name: 'OrgMembers', label: () => t('orgSettings.humanMembers'), icon: Users },
   { name: 'OrgSettingsGenes', label: () => t('orgSettings.requiredGenesTab'), icon: Dna },
   { name: 'OrgSettingsSmtp', label: () => t('orgSettings.smtpConfigTab'), icon: Mail },
 ]
+
+const navItems = computed(() =>
+  allNavItems.filter(item => router.hasRoute(item.name))
+)
 
 onMounted(async () => {
   if (!orgStore.currentOrg) await orgStore.fetchMyOrg()

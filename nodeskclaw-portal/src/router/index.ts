@@ -77,6 +77,7 @@ const ceRoutes: RouteRecordRaw[] = [
   {
     path: '/org-settings',
     component: () => import('@/views/OrgSettings.vue'),
+    redirect: { name: 'OrgSettingsGenes' },
     children: [
       { path: 'genes', name: 'OrgSettingsGenes', component: () => import('@/views/OrgSettingsGenes.vue') },
       ...eeOrgSettingsChildren,

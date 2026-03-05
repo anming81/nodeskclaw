@@ -8,11 +8,15 @@ import { PawPrint, Settings, LogOut, BarChart3, Boxes, Server, FlaskConical, Fol
 import LocaleSelect from '@/components/shared/LocaleSelect.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
+import { useFeature } from '@/composables/useFeature'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { t } = useI18n()
+
+const { isEnabled: hasBilling } = useFeature('billing')
+const { isEnabled: hasEnterpriseFiles } = useFeature('enterprise_files')
 
 const isLoginPage = computed(() => route.path === '/login')
 const hideNav = computed(() => route.meta.hideNav === true)
@@ -97,6 +101,7 @@ function onLocaleChange(value: string) {
               {{ t('common.instance') }}
             </button>
             <button
+              v-if="hasBilling"
               :class="[
                 'px-3 py-1.5 rounded-md text-sm transition-colors',
                 route.path === '/usage' ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
@@ -117,7 +122,7 @@ function onLocaleChange(value: string) {
               {{ t('common.geneMarket') }}
             </button>
             <button
-              v-if="authStore.user?.portal_org_role === 'admin'"
+              v-if="hasEnterpriseFiles && authStore.user?.portal_org_role === 'admin'"
               :class="[
                 'px-3 py-1.5 rounded-md text-sm transition-colors',
                 route.path.startsWith('/enterprise-files') ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
