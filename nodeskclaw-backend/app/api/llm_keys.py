@@ -536,6 +536,38 @@ async def update_instance_llm_configs(
 
     from app.services.llm_config_service import write_instance_llm_configs
     await write_instance_llm_configs(instance, db, body.configs, current_user.id)
+
+    owner_id = instance.created_by
+    existing_result = await db.execute(
+        select(UserLlmConfig).where(
+            UserLlmConfig.user_id == owner_id,
+            UserLlmConfig.org_id == instance.org_id,
+            not_deleted(UserLlmConfig),
+        )
+    )
+    existing_map = {c.provider: c for c in existing_result.scalars().all()}
+
+    for cfg in body.configs:
+        existing = existing_map.get(cfg.provider)
+        if existing:
+            existing.key_source = cfg.key_source
+            existing.selected_models = cfg.selected_models
+        else:
+            db.add(UserLlmConfig(
+                user_id=owner_id,
+                org_id=instance.org_id,
+                provider=cfg.provider,
+                key_source=cfg.key_source,
+                selected_models=cfg.selected_models,
+            ))
+
+    instance.llm_providers = [c.provider for c in body.configs]
+    await db.commit()
+
+    logger.info(
+        "已同步 LLM 配置到 DB: instance=%s providers=%s",
+        instance.name, [c.provider for c in body.configs],
+    )
     return ApiResponse(message="配置已写入")
 
 
