@@ -854,17 +854,22 @@ function updateSuggestionIndex(state: SuggestionState, idx: number) {
               class="hidden"
               @change="handleFileSelect"
             />
-            <button
-              class="p-1.5 rounded-md transition-colors"
-              :class="store.fileUploadEnabled
-                ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                : 'text-muted-foreground/40 cursor-not-allowed'"
-              :title="store.fileUploadEnabled ? t('chat.attachFile') : t('chat.fileUploadDisabled')"
-              :disabled="!store.fileUploadEnabled"
-              @click="triggerFileInput"
-            >
-              <Paperclip class="w-3.5 h-3.5" />
-            </button>
+            <span class="relative group/clip">
+              <button
+                class="p-1.5 rounded-md transition-colors"
+                :class="store.fileUploadEnabled
+                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  : 'text-muted-foreground/40 cursor-not-allowed'"
+                :disabled="!store.fileUploadEnabled"
+                @click="triggerFileInput"
+              >
+                <Paperclip class="w-3.5 h-3.5" />
+              </button>
+              <span
+                v-if="!store.fileUploadEnabled"
+                class="clip-tooltip"
+              >{{ t('chat.fileUploadDisabled') }}</span>
+            </span>
             <button
               class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               :title="t('chat.mentionAgent')"
@@ -1002,6 +1007,26 @@ function updateSuggestionIndex(state: SuggestionState, idx: number) {
   overflow-y: scroll;
   overflow-x: hidden;
 }
+
+.clip-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: hsl(var(--popover-foreground));
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  z-index: 50;
+}
+.group\/clip:hover .clip-tooltip { display: block; }
 
 .chat-markdown {
   overflow: hidden;

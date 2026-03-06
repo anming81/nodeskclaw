@@ -415,7 +415,7 @@ const zhCN = {
     slashCommand: "/ 命令",
     immediate: "立即执行",
     attachFile: "添加附件",
-    fileUploadDisabled: "文件上传未启用（需配置对象存储）",
+    fileUploadDisabled: "当前组织暂未配置对象存储，无法上传文件",
     fileTooLarge: "文件大小不能超过 {size}MB",
     fileUploading: "正在上传文件...",
     fileUploadFailed: "文件上传失败",
