@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import type { InstanceSkillItem, InstanceGeneItem, GenomeItem } from '@/stores/gene'
 
 const props = defineProps<{
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
+const { confirm } = useConfirm()
 
 interface InstanceDetail {
   id: string
@@ -40,8 +42,7 @@ interface InstanceDetail {
   env_vars: Record<string, string> | null
   created_at: string
   my_role: string | null
-  workspace_id: string | null
-  workspace_name: string | null
+  workspaces?: { id: string; name: string }[]
   pods: { name: string; status: string; ready: boolean; restart_count: number }[]
 }
 
@@ -50,9 +51,10 @@ const ROLE_LEVEL: Record<string, number> = { viewer: 10, user: 20, editor: 30, a
 const instance = ref<InstanceDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
-const openclawUrl = ref('')
-const urlCopied = ref(false)
+const gatewayToken = ref('')
+const tokenCopied = ref(false)
 const restarting = ref(false)
+const resettingToken = ref(false)
 const showRestartConfirm = ref(false)
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
@@ -114,6 +116,18 @@ const statusColors: Record<string, string> = {
   failed: 'text-red-400',
 }
 
+const maskedGatewayToken = computed(() => {
+  const token = gatewayToken.value
+  if (!token) return ''
+  if (token.length <= 4) return `${token.slice(0, 1)}****${token.slice(-1)}`
+  if (token.length <= 8) return `${token.slice(0, 2)}****${token.slice(-2)}`
+  return `${token.slice(0, 6)}********${token.slice(-4)}`
+})
+
+function syncGatewayToken(detail: InstanceDetail | null) {
+  gatewayToken.value = detail?.env_vars?.OPENCLAW_GATEWAY_TOKEN || ''
+}
+
 function close() {
   emit('update:visible', false)
 }
@@ -124,17 +138,12 @@ async function fetchDetail() {
   error.value = ''
   try {
     const res = await api.get(`/instances/${props.instanceId}`)
-    instance.value = res.data.data
-    if (instance.value?.ingress_domain && instance.value.env_vars) {
-      const token = instance.value.env_vars.OPENCLAW_GATEWAY_TOKEN
-      if (token) {
-        openclawUrl.value = `https://${instance.value.ingress_domain}?token=${token}`
-      } else {
-        openclawUrl.value = ''
-      }
-    } else {
-      openclawUrl.value = ''
+    const data = res.data.data
+    if (data) {
+      data.workspaces = Array.isArray(data?.workspaces) ? data.workspaces : (data?.workspace_id ? [{ id: data.workspace_id, name: data.workspace_name ?? '' }] : [])
     }
+    instance.value = data
+    syncGatewayToken(instance.value)
     if (instance.value?.status === 'restarting') {
       restarting.value = true
       startPolling()
@@ -182,11 +191,12 @@ async function fetchGenes() {
   }
 }
 
-async function copyUrl() {
+async function copyToken() {
   try {
-    await navigator.clipboard.writeText(openclawUrl.value)
-    urlCopied.value = true
-    setTimeout(() => { urlCopied.value = false }, 2000)
+    await navigator.clipboard.writeText(gatewayToken.value)
+    tokenCopied.value = true
+    toast.success(t('agentDetailDialog.tokenCopied'))
+    setTimeout(() => { tokenCopied.value = false }, 2000)
   } catch { /* ignore */ }
 }
 
@@ -199,7 +209,12 @@ async function pollOnce() {
   if (!props.instanceId) return
   try {
     const res = await api.get(`/instances/${props.instanceId}`)
-    instance.value = res.data.data
+    const data = res.data.data
+    if (data) {
+      data.workspaces = Array.isArray(data?.workspaces) ? data.workspaces : (data?.workspace_id ? [{ id: data.workspace_id, name: data.workspace_name ?? '' }] : [])
+    }
+    instance.value = data
+    syncGatewayToken(instance.value)
     if (instance.value && instance.value.status !== 'restarting') {
       stopPolling()
       restarting.value = false
@@ -231,6 +246,42 @@ async function handleRestart() {
   }
 }
 
+async function handleResetToken() {
+  if (!props.instanceId || restarting.value || resettingToken.value) return
+
+  const ok = await confirm({
+    title: t('agentDetailDialog.resetTokenConfirmTitle'),
+    description: t('agentDetailDialog.resetTokenConfirmDesc'),
+    confirmText: t('agentDetailDialog.resetTokenConfirmAction'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  resettingToken.value = true
+  try {
+    const res = await api.post(`/instances/${props.instanceId}/regenerate-token`)
+    const token = res.data?.data?.token || ''
+    if (token) {
+      gatewayToken.value = token
+      if (instance.value) {
+        instance.value.env_vars = {
+          ...(instance.value.env_vars || {}),
+          OPENCLAW_GATEWAY_TOKEN: token,
+          NODESKCLAW_TOKEN: token,
+        }
+      }
+    }
+    restarting.value = true
+    toast.success(res.data?.message || t('agentDetailDialog.resetTokenSuccess'))
+    startPolling()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || t('agentDetailDialog.resetTokenFailed'))
+  } finally {
+    resettingToken.value = false
+  }
+}
+
 async function handleDelete() {
   showDeleteConfirm.value = false
   deleting.value = true
@@ -253,8 +304,9 @@ function openFullPage() {
 watch(() => props.visible, (val) => {
   if (val && props.instanceId) {
     instance.value = null
-    openclawUrl.value = ''
+    gatewayToken.value = ''
     restarting.value = false
+    resettingToken.value = false
     deleting.value = false
     showRestartConfirm.value = false
     showDeleteConfirm.value = false
@@ -322,45 +374,33 @@ onUnmounted(stopPolling)
             </div>
 
             <template v-else-if="instance">
-              <!-- OpenClaw URL -->
-              <div v-if="openclawUrl" class="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
+              <!-- Access Token -->
+              <div v-if="gatewayToken" class="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="text-sm font-medium">{{ t('agentDetailDialog.openclawAccess') }}</p>
+                    <p class="text-sm font-medium">{{ t('agentDetailDialog.accessToken') }}</p>
                     <p class="text-xs text-muted-foreground mt-0.5">
-                      {{ restarting ? t('agentDetailDialog.restarting') : t('agentDetailDialog.openclawHint') }}
+                      {{ restarting ? t('agentDetailDialog.accessTokenRestartingHint') : t('agentDetailDialog.accessTokenHint') }}
                     </p>
                   </div>
                   <button
-                    v-if="restarting"
-                    disabled
-                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground text-xs cursor-not-allowed"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    :disabled="restarting || resettingToken"
+                    @click="handleResetToken"
                   >
-                    <Loader2 class="w-3.5 h-3.5 animate-spin" />
-                    {{ t('agentDetailDialog.restarting') }}
+                    <Loader2 v-if="resettingToken" class="w-3.5 h-3.5 animate-spin" />
+                    <RotateCcw v-else class="w-3.5 h-3.5" />
+                    {{ resettingToken ? t('agentDetailDialog.resettingToken') : t('agentDetailDialog.resetToken') }}
                   </button>
-                  <a
-                    v-else
-                    :href="openclawUrl"
-                    target="_blank"
-                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-                  >
-                    <ExternalLink class="w-3.5 h-3.5" />
-                    {{ t('agentDetailDialog.open') }}
-                  </a>
                 </div>
                 <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-background/60 border border-border/50">
-                  <a
-                    :href="openclawUrl"
-                    target="_blank"
-                    class="flex-1 text-xs font-mono truncate transition-colors"
-                    :class="restarting ? 'text-muted-foreground pointer-events-none' : 'text-primary/80 hover:text-primary'"
-                  >{{ openclawUrl }}</a>
+                  <span class="flex-1 text-xs font-mono break-all text-foreground/80">{{ maskedGatewayToken }}</span>
                   <button
                     class="shrink-0 p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                    @click="copyUrl"
+                    :disabled="!gatewayToken"
+                    @click="copyToken"
                   >
-                    <Check v-if="urlCopied" class="w-3 h-3 text-green-400" />
+                    <Check v-if="tokenCopied" class="w-3 h-3 text-green-400" />
                     <Copy v-else class="w-3 h-3" />
                   </button>
                 </div>
@@ -509,7 +549,7 @@ onUnmounted(stopPolling)
               {{ restarting ? t('agentDetailDialog.restarting') : t('agentDetailDialog.restart') }}
             </button>
             <button
-              v-if="(ROLE_LEVEL[instance.my_role ?? ''] ?? 0) >= ROLE_LEVEL.admin && !instance.workspace_id"
+              v-if="(ROLE_LEVEL[instance.my_role ?? ''] ?? 0) >= ROLE_LEVEL.admin && !(instance.workspaces?.length ?? 0)"
               class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 transition-colors ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="deleting"
               @click="showDeleteConfirm = true"

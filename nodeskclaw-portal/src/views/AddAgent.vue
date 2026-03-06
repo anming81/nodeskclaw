@@ -18,7 +18,7 @@ interface MissingGene {
   gene_category: string | null
 }
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useWorkspaceStore()
@@ -33,6 +33,7 @@ interface InstanceItem {
   name: string
   slug?: string
   status: string
+  workspaces?: { id: string; name: string }[]
 }
 
 const instances = ref<InstanceItem[]>([])
@@ -69,6 +70,15 @@ const alreadyInWorkspace = computed(() =>
   new Set(store.currentWorkspace?.agents?.map((a) => a.instance_id) || []),
 )
 
+function otherWorkspaces(inst: InstanceItem): { id: string; name: string }[] {
+  if (!inst.workspaces?.length) return []
+  return inst.workspaces.filter((w) => w.id !== workspaceId.value)
+}
+
+function joinNames(names: string[]): string {
+  return names.join(String(locale.value).startsWith('zh') ? '、' : ', ')
+}
+
 const filtered = computed(() =>
   instances.value.filter(
     (i) => !search.value || i.name.toLowerCase().includes(search.value.toLowerCase()),
@@ -94,6 +104,7 @@ async function fetchInstances() {
       name: i.name,
       slug: i.slug,
       status: i.status,
+      workspaces: i.workspaces ?? (i.workspace_id ? [{ id: i.workspace_id, name: i.workspace_name ?? '' }] : []),
     }))
   } catch (e) {
     console.error('fetch instances error:', e)
@@ -261,6 +272,9 @@ function goBack() {
                 <span v-if="inst.slug" class="shrink-0 max-w-[100px] truncate inline-block px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-muted-foreground leading-none">{{ inst.slug }}</span>
               </div>
               <p class="text-xs text-muted-foreground">{{ inst.status }}</p>
+              <p v-if="otherWorkspaces(inst).length" class="text-xs text-amber-600 mt-0.5" :title="t('addAgentView.inOtherWorkspaceHint', { names: joinNames(otherWorkspaces(inst).map(w => w.name)) })">
+                {{ t('addAgentView.inOtherWorkspace') }}: {{ joinNames(otherWorkspaces(inst).map(w => w.name)) }}
+              </p>
             </div>
           </div>
 

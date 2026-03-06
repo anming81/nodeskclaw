@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, inject, type Ref, type ComputedRef } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
-  ExternalLink, RefreshCw, Trash2, Circle, Loader2, Copy, Check, RotateCcw, AlertTriangle,
+  RefreshCw, Trash2, Circle, Loader2, Copy, Check, RotateCcw, AlertTriangle,
 } from 'lucide-vue-next'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const router = useRouter()
 const toast = useToast()
+const { t, locale } = useI18n()
+
+function joinNames(names: string[]): string {
+  return names.join(String(locale.value).startsWith('zh') ? '、' : ', ')
+}
+const { confirm } = useConfirm()
 const instanceId = inject<ComputedRef<string>>('instanceId')!
 const instanceBasic = inject<Ref<{ name: string } | null>>('instanceBasic')!
 const refreshInstanceBasic = inject<() => Promise<void>>('refreshInstanceBasic')!
@@ -33,17 +41,17 @@ interface InstanceDetail {
   storage_size: string
   env_vars: Record<string, string> | null
   created_at: string
-  workspace_id: string | null
-  workspace_name: string | null
+  workspaces?: { id: string; name: string }[]
   pods: { name: string; status: string; ready: boolean; restart_count: number }[]
 }
 
 const instance = ref<InstanceDetail | null>(null)
 const loading = ref(true)
 const pageError = ref('')
-const openclawUrl = ref('')
-const urlCopied = ref(false)
+const gatewayToken = ref('')
+const tokenCopied = ref(false)
 const restarting = ref(false)
+const resettingToken = ref(false)
 const showRestartDialog = ref(false)
 const showDeleteDialog = ref(false)
 const deleting = ref(false)
@@ -59,11 +67,24 @@ function formatCpu(val: string): string {
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let pollTimeout: ReturnType<typeof setTimeout> | null = null
 
-async function copyUrl() {
+const maskedGatewayToken = computed(() => {
+  const token = gatewayToken.value
+  if (!token) return ''
+  if (token.length <= 4) return `${token.slice(0, 1)}****${token.slice(-1)}`
+  if (token.length <= 8) return `${token.slice(0, 2)}****${token.slice(-2)}`
+  return `${token.slice(0, 6)}********${token.slice(-4)}`
+})
+
+function syncGatewayToken(detail: InstanceDetail | null) {
+  gatewayToken.value = detail?.env_vars?.OPENCLAW_GATEWAY_TOKEN || ''
+}
+
+async function copyToken() {
   try {
-    await navigator.clipboard.writeText(openclawUrl.value)
-    urlCopied.value = true
-    setTimeout(() => { urlCopied.value = false }, 2000)
+    await navigator.clipboard.writeText(gatewayToken.value)
+    tokenCopied.value = true
+    toast.success(t('agentDetailDialog.tokenCopied'))
+    setTimeout(() => { tokenCopied.value = false }, 2000)
   } catch { /* ignore */ }
 }
 
@@ -79,20 +100,24 @@ onUnmounted(() => {
   stopPolling()
 })
 
+function normalizeWorkspaces(data: any): { id: string; name: string }[] {
+  if (Array.isArray(data?.workspaces)) return data.workspaces
+  if (data?.workspace_id) return [{ id: data.workspace_id, name: data.workspace_name ?? '' }]
+  return []
+}
+
 async function fetchDetail() {
   loading.value = true
   try {
     const res = await api.get(`/instances/${instanceId.value}`)
-    instance.value = res.data.data
-
-    if (instance.value?.ingress_domain && instance.value.env_vars) {
-      const token = instance.value.env_vars.OPENCLAW_GATEWAY_TOKEN
-      if (token) {
-        openclawUrl.value = `https://${instance.value.ingress_domain}?token=${token}`
-      }
+    const data = res.data.data
+    if (data) {
+      data.workspaces = normalizeWorkspaces(data)
     }
+    instance.value = data
+    syncGatewayToken(instance.value)
   } catch (e: any) {
-    pageError.value = e?.response?.data?.message || '加载失败'
+    pageError.value = e?.response?.data?.message || t('agentDetailDialog.loadFailed')
   } finally {
     loading.value = false
   }
@@ -101,7 +126,12 @@ async function fetchDetail() {
 async function pollOnce() {
   try {
     const res = await api.get(`/instances/${instanceId.value}`)
-    instance.value = res.data.data
+    const data = res.data.data
+    if (data) {
+      data.workspaces = normalizeWorkspaces(data)
+    }
+    instance.value = data
+    syncGatewayToken(instance.value)
     await refreshInstanceBasic()
 
     if (instance.value && instance.value.status !== 'restarting') {
@@ -145,6 +175,43 @@ async function handleRestart() {
   }
 }
 
+async function handleResetToken() {
+  if (restarting.value || resettingToken.value) return
+
+  const ok = await confirm({
+    title: t('agentDetailDialog.resetTokenConfirmTitle'),
+    description: t('agentDetailDialog.resetTokenConfirmDesc'),
+    confirmText: t('agentDetailDialog.resetTokenConfirmAction'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!ok) return
+
+  resettingToken.value = true
+  try {
+    const res = await api.post(`/instances/${instanceId.value}/regenerate-token`)
+    const token = res.data?.data?.token || ''
+    if (token) {
+      gatewayToken.value = token
+      if (instance.value) {
+        instance.value.env_vars = {
+          ...(instance.value.env_vars || {}),
+          OPENCLAW_GATEWAY_TOKEN: token,
+          NODESKCLAW_TOKEN: token,
+        }
+      }
+    }
+    restarting.value = true
+    toast.success(res.data?.message || t('agentDetailDialog.resetTokenSuccess'))
+    await refreshInstanceBasic()
+    startPolling()
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message || t('agentDetailDialog.resetTokenFailed'))
+  } finally {
+    resettingToken.value = false
+  }
+}
+
 async function handleDelete() {
   showDeleteDialog.value = false
   deleting.value = true
@@ -168,45 +235,33 @@ async function handleDelete() {
     <div v-else-if="pageError" class="text-center py-20 text-destructive">{{ pageError }}</div>
 
     <div v-else-if="instance" class="space-y-6">
-      <!-- OpenClaw 访问 -->
-      <div v-if="openclawUrl" class="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
+      <!-- Access Token -->
+      <div v-if="gatewayToken" class="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm font-medium">DeskClaw 访问地址</p>
+            <p class="text-sm font-medium">{{ t('agentDetailDialog.accessToken') }}</p>
             <p class="text-xs text-muted-foreground mt-0.5">
-              {{ restarting ? 'AI 员工正在重启，请稍候...' : '点击即可打开 AI 员工' }}
+              {{ restarting ? t('agentDetailDialog.accessTokenRestartingHint') : t('agentDetailDialog.accessTokenHint') }}
             </p>
           </div>
           <button
-            v-if="restarting"
-            disabled
-            class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-muted text-muted-foreground text-sm font-medium cursor-not-allowed"
+            class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="restarting || resettingToken"
+            @click="handleResetToken"
           >
-            <Loader2 class="w-4 h-4 animate-spin" />
-            重启中
+            <Loader2 v-if="resettingToken" class="w-4 h-4 animate-spin" />
+            <RotateCcw v-else class="w-4 h-4" />
+            {{ resettingToken ? t('agentDetailDialog.resettingToken') : t('agentDetailDialog.resetToken') }}
           </button>
-          <a
-            v-else
-            :href="openclawUrl"
-            target="_blank"
-            class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <ExternalLink class="w-4 h-4" />
-            打开
-          </a>
         </div>
         <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-background/60 border border-border/50">
-          <a
-            :href="openclawUrl"
-            target="_blank"
-            class="flex-1 text-xs font-mono truncate transition-colors"
-            :class="restarting ? 'text-muted-foreground pointer-events-none' : 'text-primary/80 hover:text-primary'"
-          >{{ openclawUrl }}</a>
+          <span class="flex-1 text-xs font-mono break-all text-foreground/80">{{ maskedGatewayToken }}</span>
           <button
             class="shrink-0 p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            @click="copyUrl"
+            :disabled="!gatewayToken"
+            @click="copyToken"
           >
-            <Check v-if="urlCopied" class="w-3.5 h-3.5 text-green-400" />
+            <Check v-if="tokenCopied" class="w-3.5 h-3.5 text-green-400" />
             <Copy v-else class="w-3.5 h-3.5" />
           </button>
         </div>
@@ -350,9 +405,19 @@ async function handleDelete() {
               </div>
               <h3 class="text-base font-semibold">删除AI 员工</h3>
             </div>
-            <div v-if="instance?.workspace_id" class="text-sm text-muted-foreground space-y-2">
-              <p>该 AI 员工当前已加入办公室「<span class="text-foreground font-medium">{{ instance.workspace_name }}</span>」，无法直接删除。</p>
-              <p class="text-xs">请先在办公室中将此 AI 员工移除，然后再执行删除操作。</p>
+            <div v-if="instance?.workspaces?.length" class="text-sm text-muted-foreground space-y-2">
+              <p>{{ t('instanceDetail.cannotDeleteInWorkspaces', { names: joinNames(instance.workspaces.map(w => w.name)) }) }}</p>
+              <p class="text-xs">{{ t('instanceDetail.workspaces') }}:</p>
+              <div class="flex flex-wrap gap-2 mt-1">
+                <router-link
+                  v-for="ws in instance.workspaces"
+                  :key="ws.id"
+                  :to="`/workspace/${ws.id}`"
+                  class="text-xs text-primary hover:underline"
+                >
+                  {{ ws.name }}
+                </router-link>
+              </div>
             </div>
             <div v-else class="text-sm text-muted-foreground space-y-2">
               <p>确定删除AI 员工「<span class="text-foreground font-medium">{{ instanceBasic?.name }}</span>」？</p>
@@ -367,10 +432,10 @@ async function handleDelete() {
                 class="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
                 @click="showDeleteDialog = false"
               >
-                {{ instance?.workspace_id ? '知道了' : '取消' }}
+                {{ instance?.workspaces?.length ? t('common.close') : t('common.cancel') }}
               </button>
               <button
-                v-if="!instance?.workspace_id"
+                v-if="!instance?.workspaces?.length"
                 class="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors"
                 @click="handleDelete"
               >
