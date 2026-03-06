@@ -1184,6 +1184,78 @@ async def lifespan(app: FastAPI):
             ))
             logger.info("自动迁移 29：已为 user_llm_keys 表添加 api_type 列")
 
+    # ── 迁移 31: 企业私有化内容 — visibility 字段 + 索引重建 ──
+    async with engine.begin() as conn:
+        vis_tables = ["genes", "genomes", "instance_templates", "workspace_templates"]
+        for tbl in vis_tables:
+            col = await conn.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = :tbl AND column_name = 'visibility'"
+            ), {"tbl": tbl})
+            if col.first() is None:
+                await conn.execute(text(
+                    f"ALTER TABLE {tbl} ADD COLUMN visibility VARCHAR(16) NOT NULL DEFAULT 'public'"
+                ))
+                logger.info("自动迁移 31：已为 %s 表添加 visibility 列", tbl)
+
+        wt_org = await conn.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'workspace_templates' AND column_name = 'org_id'"
+        ))
+        if wt_org.first() is None:
+            await conn.execute(text(
+                "ALTER TABLE workspace_templates ADD COLUMN org_id VARCHAR(36) REFERENCES organizations(id)"
+            ))
+            logger.info("自动迁移 31：已为 workspace_templates 表添加 org_id 列")
+
+        wt_pub = await conn.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'workspace_templates' AND column_name = 'is_public'"
+        ))
+        if wt_pub.first() is not None:
+            await conn.execute(text(
+                "ALTER TABLE workspace_templates DROP COLUMN is_public"
+            ))
+            logger.info("自动迁移 31：已从 workspace_templates 移除 is_public 列")
+
+        old_gene_idx = await conn.execute(text(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'uq_genes_slug_active'"
+        ))
+        if old_gene_idx.first() is not None:
+            await conn.execute(text("DROP INDEX uq_genes_slug_active"))
+            await conn.execute(text(
+                "CREATE UNIQUE INDEX uq_genes_slug_org_active ON genes (slug, org_id) WHERE deleted_at IS NULL"
+            ))
+            logger.info("自动迁移 31：已重建 genes 唯一索引为 (slug, org_id)")
+
+        old_genome_idx = await conn.execute(text(
+            "SELECT 1 FROM pg_indexes WHERE indexname = 'uq_genomes_slug_active'"
+        ))
+        if old_genome_idx.first() is not None:
+            await conn.execute(text("DROP INDEX uq_genomes_slug_active"))
+            await conn.execute(text(
+                "CREATE UNIQUE INDEX uq_genomes_slug_org_active ON genomes (slug, org_id) WHERE deleted_at IS NULL"
+            ))
+            logger.info("自动迁移 31：已重建 genomes 唯一索引为 (slug, org_id)")
+
+    # 迁移 31 数据回填：根据 org_id 推断 visibility
+    async with async_session_factory() as db:
+        from sqlalchemy import text as sa_text
+        for tbl in ["genes", "genomes", "instance_templates"]:
+            result = await db.execute(sa_text(
+                f"UPDATE {tbl} SET visibility = 'org_private' "
+                f"WHERE org_id IS NOT NULL AND visibility = 'public'"
+            ))
+            if result.rowcount:
+                logger.info("自动迁移 31：%s 表已将 %s 条有 org_id 的记录标记为 org_private", tbl, result.rowcount)
+        ws_tpl = await db.execute(sa_text(
+            "UPDATE workspace_templates SET visibility = 'org_private' "
+            "WHERE is_preset = false AND visibility = 'public' AND org_id IS NOT NULL"
+        ))
+        if ws_tpl.rowcount:
+            logger.info("自动迁移 31：workspace_templates 已将 %s 条非预设模板标记为 org_private", ws_tpl.rowcount)
+        await db.commit()
+
     # ── 恢复卡在 deploying 状态的实例 ─────────────────
     # 后端重启（如 --reload）会杀死 asyncio.create_task 部署管道，
     # 实例可能永远卡在 deploying。启动时从 K8s 同步真实状态。
