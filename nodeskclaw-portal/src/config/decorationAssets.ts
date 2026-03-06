@@ -11,7 +11,7 @@ export const FLOOR_ASSETS: DecorationAsset[] = [
     id: 'terrazzo-diamond',
     nameKey: 'decoration.floor.terrazzo_diamond',
     category: 'floor',
-    url: '/assets/hex2d/floors/terrazzo-diamond.png',
+    url: '/assets/hex2d/floors/terrazzo-tile.png',
   },
   {
     id: 'carpet-warm',

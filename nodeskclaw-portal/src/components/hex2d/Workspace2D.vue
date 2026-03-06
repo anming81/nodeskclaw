@@ -118,13 +118,41 @@ const GRID_RANGE = 8
 const HEX_CELL_W = Math.sqrt(3) * HEX_RADIUS
 const HEX_CELL_H = 2 * HEX_RADIUS
 
+const TILE_W = HEX_CELL_W / 3
+const TILE_H = TILE_W / 2
+
+function floorRhombusPoints(cx: number, cy: number): string {
+  const R = HEX_RADIUS
+  const s3h = Math.sqrt(3) / 2 * R
+  return [
+    `${cx},${cy}`,
+    `${cx + s3h},${cy + R / 2}`,
+    `${cx},${cy + R}`,
+    `${cx - s3h},${cy + R / 2}`,
+  ].join(' ')
+}
+
 const decoratedHexPositions = computed(() => {
   const decos = props.hexDecorations || {}
   return Object.entries(decos).map(([key, deco]) => {
     const [q, r] = key.split(',').map(Number)
     const pos = worldPos(q, r)
-    return { key, q, r, px: pos.px, py: pos.py, ...deco }
+    const patId = deco.floorUrl
+      ? `floor-pat-${deco.floorUrl.replace(/[^a-zA-Z0-9]/g, '_')}`
+      : undefined
+    return { key, q, r, px: pos.px, py: pos.py, ...deco, floorPatternId: patId }
   })
+})
+
+const uniqueFloorPatterns = computed(() => {
+  const urls = new Set<string>()
+  for (const hex of decoratedHexPositions.value) {
+    if (hex.floorUrl) urls.add(hex.floorUrl)
+  }
+  return [...urls].map(url => ({
+    id: `floor-pat-${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    url,
+  }))
 })
 
 const furniturePositions = computed(() => {
@@ -341,27 +369,28 @@ const emptyHexes = computed(() => {
       <clipPath id="hex-clip">
         <polygon :points="hexPointsStr(0, 0, HEX_RADIUS)" />
       </clipPath>
+      <pattern
+        v-for="pat in uniqueFloorPatterns"
+        :key="pat.id"
+        :id="pat.id"
+        patternUnits="userSpaceOnUse"
+        :width="TILE_W"
+        :height="TILE_H"
+      >
+        <image :href="pat.url" :width="TILE_W" :height="TILE_H" />
+      </pattern>
     </defs>
 
     <g :transform="transformStr">
-      <!-- Per-hex floor texture layer -->
+      <!-- Per-hex floor texture layer (isometric rhombus with tiled pattern) -->
       <g class="floor-layer">
-        <g
+        <polygon
           v-for="item in decoratedHexPositions"
+          v-show="item.floorPatternId"
           :key="`floor-${item.key}`"
-          :transform="`translate(${item.px}, ${item.py})`"
-        >
-          <image
-            v-if="item.floorUrl"
-            :href="item.floorUrl"
-            :x="-HEX_CELL_W / 2"
-            :y="-HEX_CELL_H / 2"
-            :width="HEX_CELL_W"
-            :height="HEX_CELL_H"
-            clip-path="url(#hex-clip)"
-            preserveAspectRatio="xMidYMid slice"
-          />
-        </g>
+          :points="floorRhombusPoints(item.px, item.py)"
+          :fill="item.floorPatternId ? `url(#${item.floorPatternId})` : 'none'"
+        />
       </g>
 
       <!-- Honeycomb grid -->
