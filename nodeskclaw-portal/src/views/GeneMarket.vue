@@ -184,7 +184,7 @@ const featuredItems = computed(() => {
   return []
 })
 
-const hasFeatured = computed(() => featuredItems.value.length > 0)
+const hasFeatured = computed(() => featuredItems.value.length > 0 && selectedVisibility.value !== 'org_private')
 
 const totalCount = computed(() => {
   if (viewMode.value === 'genes') return store.totalGenes
