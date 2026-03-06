@@ -8,6 +8,7 @@ from croniter import croniter
 from sqlalchemy import select
 
 from app.models.workspace import Workspace
+from app.models.workspace_agent import WorkspaceAgent
 from app.models.workspace_schedule import WorkspaceSchedule
 
 logger = logging.getLogger(__name__)
@@ -86,13 +87,16 @@ class ScheduleRunner:
             agent_ids = [ep.entity_id for ep in audience if ep.endpoint_type == "agent"]
         else:
             agents_q = await db.execute(
-                select(Instance).where(
-                    Instance.workspace_id == workspace_id,
+                select(Instance, WorkspaceAgent).join(
+                    WorkspaceAgent,
+                    (WorkspaceAgent.instance_id == Instance.id) & (WorkspaceAgent.deleted_at.is_(None)),
+                ).where(
+                    WorkspaceAgent.workspace_id == workspace_id,
                     Instance.status == "running",
                     not_deleted(Instance),
                 )
             )
-            agent_ids = [a.id for a in agents_q.scalars().all()]
+            agent_ids = [row[0].id for row in agents_q.all()]
 
         if agent_ids:
             await send_system_message_to_agents(

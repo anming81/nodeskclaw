@@ -13,6 +13,7 @@ from app.models.base import not_deleted
 from app.models.corridor import HumanHex
 from app.models.instance import Instance
 from app.models.workspace import Workspace
+from app.models.workspace_agent import WorkspaceAgent
 from app.services import workspace_message_service as msg_service
 from app.services import workspace_service
 
@@ -290,29 +291,36 @@ async def _find_agent_by_name(
     db: AsyncSession, workspace_id: str, agent_name: str,
 ) -> Instance | None:
     result = await db.execute(
-        select(Instance).where(
-            Instance.workspace_id == workspace_id,
+        select(Instance, WorkspaceAgent).join(
+            WorkspaceAgent,
+            (WorkspaceAgent.instance_id == Instance.id) & (WorkspaceAgent.deleted_at.is_(None)),
+        ).where(
+            WorkspaceAgent.workspace_id == workspace_id,
             Instance.status == "running",
             Instance.deleted_at.is_(None),
         )
     )
-    agents = result.scalars().all()
-    for a in agents:
-        display = a.agent_display_name or a.name
-        if display.lower() == agent_name.lower() or a.name.lower() == agent_name.lower():
-            return a
+    rows = result.all()
+    agent_name_lower = agent_name.lower()
+    for inst, wa in rows:
+        display = (wa.display_name or inst.name) if wa else (inst.agent_display_name or inst.name)
+        if display.lower() == agent_name_lower or inst.name.lower() == agent_name_lower:
+            return inst
     return None
 
 
 async def _get_workspace_agents(db: AsyncSession, workspace_id: str) -> list[Instance]:
     result = await db.execute(
-        select(Instance).where(
-            Instance.workspace_id == workspace_id,
+        select(Instance, WorkspaceAgent).join(
+            WorkspaceAgent,
+            (WorkspaceAgent.instance_id == Instance.id) & (WorkspaceAgent.deleted_at.is_(None)),
+        ).where(
+            WorkspaceAgent.workspace_id == workspace_id,
             Instance.status == "running",
             Instance.deleted_at.is_(None),
         )
     )
-    return list(result.scalars().all())
+    return [row[0] for row in result.all()]
 
 
 async def _invoke_target_agent(
