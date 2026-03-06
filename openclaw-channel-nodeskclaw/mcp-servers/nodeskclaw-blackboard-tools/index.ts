@@ -24,36 +24,46 @@ const server = new Server({ name: "nodeskclaw-blackboard-tools", version: "1.0.0
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
-    { name: "get_blackboard", description: "Read the full structured blackboard (objectives, tasks, status, performance)", inputSchema: { type: "object", properties: {} } },
-    { name: "list_tasks", description: "List all tasks on the blackboard", inputSchema: { type: "object", properties: {} } },
-    { name: "create_task", description: "Create a new task on the blackboard", inputSchema: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, priority: { type: "string", enum: ["high", "medium", "low"] }, assignee_id: { type: "string" } }, required: ["title"] } },
-    { name: "update_task", description: "Update an existing task (status, description, etc.)", inputSchema: { type: "object", properties: { task_id: { type: "string" }, status: { type: "string", enum: ["todo", "doing", "done", "blocked"] }, description: { type: "string" }, output_version: { type: "string" } }, required: ["task_id"] } },
-    { name: "get_objectives", description: "Read current OKR objectives", inputSchema: { type: "object", properties: {} } },
+    { name: "get_blackboard", description: "Read the full structured blackboard (objectives, tasks, markdown notes)", inputSchema: { type: "object", properties: {} } },
+    { name: "list_tasks", description: "List tasks on the blackboard, optionally filtered by status", inputSchema: { type: "object", properties: { status: { type: "string", enum: ["pending", "in_progress", "done", "blocked"], description: "Filter by task status" } } } },
+    { name: "create_task", description: "Create a new task on the blackboard", inputSchema: { type: "object", properties: { title: { type: "string" }, description: { type: "string" }, priority: { type: "string", enum: ["urgent", "high", "medium", "low"] }, assignee_id: { type: "string" }, estimated_value: { type: "number", description: "Estimated monetary value" } }, required: ["title"] } },
+    { name: "update_task", description: "Update an existing task (status, value, etc.)", inputSchema: { type: "object", properties: { task_id: { type: "string" }, status: { type: "string", enum: ["pending", "in_progress", "done", "blocked"] }, description: { type: "string" }, title: { type: "string" }, priority: { type: "string", enum: ["urgent", "high", "medium", "low"] }, actual_value: { type: "number", description: "Actual output value after completion" }, token_cost: { type: "number", description: "Tokens consumed" }, blocker_reason: { type: "string", description: "Reason when blocked" }, estimated_value: { type: "number" } }, required: ["task_id"] } },
+    { name: "archive_task", description: "Archive a completed task", inputSchema: { type: "object", properties: { task_id: { type: "string" } }, required: ["task_id"] } },
+    { name: "get_objectives", description: "Read current OKR objectives and progress", inputSchema: { type: "object", properties: {} } },
   ],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args } = req.params;
   const ws = WORKSPACE_ID;
+  const p = (args || {}) as Record<string, unknown>;
   let result: unknown;
 
   switch (name) {
     case "get_blackboard":
       result = await apiFetch(`/workspaces/${ws}/blackboard`);
       break;
-    case "list_tasks":
-      result = await apiFetch(`/workspaces/${ws}/blackboard`).then((r: any) => r.data?.tasks || []);
+    case "list_tasks": {
+      const statusFilter = p.status ? `?status=${p.status}` : "";
+      result = await apiFetch(`/workspaces/${ws}/blackboard/tasks${statusFilter}`);
       break;
+    }
     case "create_task":
-      result = await apiFetch(`/workspaces/${ws}/blackboard/tasks`, "POST", args);
+      result = await apiFetch(`/workspaces/${ws}/blackboard/tasks`, "POST", {
+        title: p.title, description: p.description, priority: p.priority,
+        assignee_id: p.assignee_id, estimated_value: p.estimated_value,
+      });
       break;
     case "update_task": {
-      const { task_id, ...rest } = args as any;
+      const { task_id, ...rest } = p;
       result = await apiFetch(`/workspaces/${ws}/blackboard/tasks/${task_id}`, "PUT", rest);
       break;
     }
+    case "archive_task":
+      result = await apiFetch(`/workspaces/${ws}/blackboard/tasks/${p.task_id}/archive`, "POST");
+      break;
     case "get_objectives":
-      result = await apiFetch(`/workspaces/${ws}/blackboard`).then((r: any) => r.data?.objectives || []);
+      result = await apiFetch(`/workspaces/${ws}/blackboard/objectives`);
       break;
     default:
       return { content: [{ type: "text", text: `Unknown tool: ${name}` }] };

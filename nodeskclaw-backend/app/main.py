@@ -1324,6 +1324,34 @@ async def lifespan(app: FastAPI):
             ))
             logger.info("自动迁移 31：已创建 workspace_objectives 表")
 
+    # ── 迁移 32: 为已有工作区补建"任务巡检"定时器 ──
+    async with async_session_factory() as db:
+        from app.models.workspace import Workspace
+        from app.models.workspace_schedule import WorkspaceSchedule
+
+        all_ws = (await db.execute(
+            select(Workspace).where(Workspace.deleted_at.is_(None))
+        )).scalars().all()
+
+        for ws in all_ws:
+            existing = (await db.execute(
+                select(WorkspaceSchedule).where(
+                    WorkspaceSchedule.workspace_id == ws.id,
+                    WorkspaceSchedule.name == "任务巡检",
+                    WorkspaceSchedule.deleted_at.is_(None),
+                )
+            )).scalar_one_or_none()
+            if existing is None:
+                db.add(WorkspaceSchedule(
+                    workspace_id=ws.id,
+                    name="任务巡检",
+                    cron_expr="0 */4 * * *",
+                    message_template="请检查黑板待办任务队列，接取并执行优先级最高的任务。完成后汇报进展。",
+                    is_active=True,
+                ))
+        await db.commit()
+        logger.info("自动迁移 32：已为 %d 个工作区检查/补建任务巡检定时器", len(all_ws))
+
     # ── 恢复卡在 deploying 状态的实例 ─────────────────
     # 后端重启（如 --reload）会杀死 asyncio.create_task 部署管道，
     # 实例可能永远卡在 deploying。启动时从 K8s 同步真实状态。

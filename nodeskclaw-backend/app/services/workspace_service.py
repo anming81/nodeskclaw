@@ -12,6 +12,7 @@ from app.models.instance import Instance
 from app.models.workspace import Workspace
 from app.models.workspace_member import WorkspaceMember, WorkspaceRole
 from app.models.workspace_objective import WorkspaceObjective
+from app.models.workspace_schedule import WorkspaceSchedule
 from app.models.workspace_task import WorkspaceTask
 from app.schemas.workspace import (
     AddAgentRequest,
@@ -80,6 +81,15 @@ async def create_workspace(db: AsyncSession, org_id: str, user_id: str, data: Wo
 
     member = WorkspaceMember(workspace_id=ws.id, user_id=user_id, role=WorkspaceRole.owner, is_admin=True)
     db.add(member)
+
+    schedule = WorkspaceSchedule(
+        workspace_id=ws.id,
+        name="任务巡检",
+        cron_expr="0 */4 * * *",
+        message_template="请检查黑板待办任务队列，接取并执行优先级最高的任务。完成后汇报进展。",
+        is_active=True,
+    )
+    db.add(schedule)
 
     await db.commit()
     await db.refresh(ws)

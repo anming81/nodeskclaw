@@ -51,22 +51,30 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
   return {
     name: "nodeskclaw_blackboard",
     description:
-      "Read/write workspace blackboard: list or create tasks, update task status, read objectives.",
+      "Read/write workspace blackboard: list or create tasks, update task status, archive tasks, read objectives.",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["get_blackboard", "list_tasks", "create_task", "update_task", "get_objectives"],
+          enum: ["get_blackboard", "list_tasks", "create_task", "update_task", "archive_task", "get_objectives"],
           description: "Which blackboard operation to perform.",
         },
         title: { type: "string", description: "Task title (create_task)." },
         description: { type: "string", description: "Task description (create_task / update_task)." },
-        priority: { type: "string", enum: ["high", "medium", "low"], description: "create_task." },
-        assignee_id: { type: "string", description: "create_task." },
-        task_id: { type: "string", description: "update_task: target task ID." },
-        status: { type: "string", enum: ["todo", "doing", "done", "blocked"], description: "update_task." },
-        output_version: { type: "string", description: "update_task: output version tag." },
+        priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "create_task." },
+        assignee_id: { type: "string", description: "create_task: assign to agent instance ID." },
+        estimated_value: { type: "number", description: "create_task: estimated monetary value." },
+        task_id: { type: "string", description: "update_task / archive_task: target task ID." },
+        status: {
+          type: "string",
+          enum: ["pending", "in_progress", "done", "blocked"],
+          description: "update_task: new task status.",
+        },
+        actual_value: { type: "number", description: "update_task: actual output value after completion." },
+        token_cost: { type: "number", description: "update_task: tokens consumed for this task." },
+        blocker_reason: { type: "string", description: "update_task: reason when status is blocked." },
+        filter_status: { type: "string", description: "list_tasks: filter by status (pending/in_progress/done/blocked)." },
       },
       required: ["action"],
     },
@@ -77,25 +85,40 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
         case "get_blackboard":
           return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard`));
         case "list_tasks": {
-          const bb = (await apiFetch(cfg, `/workspaces/${ws}/blackboard`)) as Record<string, unknown>;
-          return jsonResult((bb.data as Record<string, unknown>)?.tasks ?? []);
+          const statusFilter = p.filter_status ? `?status=${p.filter_status}` : "";
+          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks${statusFilter}`));
         }
         case "create_task":
           return jsonResult(
             await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks`, "POST", {
-              title: p.title, description: p.description, priority: p.priority, assignee_id: p.assignee_id,
+              title: p.title,
+              description: p.description,
+              priority: p.priority,
+              assignee_id: p.assignee_id,
+              estimated_value: p.estimated_value,
             }),
           );
         case "update_task": {
-          const { task_id, action: _, ...rest } = p;
+          const body: Record<string, unknown> = {};
+          if (p.status !== undefined) body.status = p.status;
+          if (p.description !== undefined) body.description = p.description;
+          if (p.title !== undefined) body.title = p.title;
+          if (p.priority !== undefined) body.priority = p.priority;
+          if (p.assignee_id !== undefined) body.assignee_id = p.assignee_id;
+          if (p.actual_value !== undefined) body.actual_value = p.actual_value;
+          if (p.token_cost !== undefined) body.token_cost = p.token_cost;
+          if (p.blocker_reason !== undefined) body.blocker_reason = p.blocker_reason;
+          if (p.estimated_value !== undefined) body.estimated_value = p.estimated_value;
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks/${task_id}`, "PUT", rest),
+            await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks/${p.task_id}`, "PUT", body),
           );
         }
-        case "get_objectives": {
-          const bb = (await apiFetch(cfg, `/workspaces/${ws}/blackboard`)) as Record<string, unknown>;
-          return jsonResult((bb.data as Record<string, unknown>)?.objectives ?? []);
-        }
+        case "archive_task":
+          return jsonResult(
+            await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks/${p.task_id}/archive`, "POST"),
+          );
+        case "get_objectives":
+          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/objectives`));
         default:
           return jsonResult({ error: `Unknown action: ${p.action}` });
       }
