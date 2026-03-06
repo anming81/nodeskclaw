@@ -103,6 +103,7 @@ export const nodeskclawPlugin: ChannelPlugin<ResolvedNoDeskClawAccount> = {
       `Use "send -t nodeskclaw -to \\"agent:{name}\\" -m \\"message\\"" to collaborate with other AI employees.`,
       `IMPORTANT: You can ONLY message agents/humans reachable from your hex position via corridor connections. Before claiming you can contact someone, call get_my_neighbors to check. If an agent is not in the result, you CANNOT message them.`,
       `If you are in multiple workspaces, add accountId=<workspace_account_id> to specify which workspace to send from.`,
+      `If get_my_neighbors returns a blackboard (node_type=blackboard), you can interact with it via the nodeskclaw_blackboard tool. The blackboard is for shared tasks and objectives — do NOT use send to message it.`,
     ],
   },
   status: {
