@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { Archive, AlertCircle, Clock, CheckCircle2, Play, Plus, Loader2 } from 'lucide-vue-next'
+import { Archive, AlertCircle, Clock, CheckCircle2, Play, Plus, Loader2, DollarSign } from 'lucide-vue-next'
 import { useWorkspaceStore, type TaskInfo } from '@/stores/workspace'
 import { useI18n } from 'vue-i18n'
 
@@ -35,9 +35,25 @@ async function loadTasks() {
   }
 }
 
+const editingValueTaskId = ref<string | null>(null)
+const valueInput = ref<number | null>(null)
+
 async function onArchive(taskId: string) {
   await store.archiveTask(props.workspaceId, taskId)
   await loadTasks()
+}
+
+function startValueEdit(task: TaskInfo) {
+  editingValueTaskId.value = task.id
+  valueInput.value = task.actual_value
+}
+
+async function saveValue(taskId: string) {
+  if (valueInput.value != null) {
+    await store.updateTask(props.workspaceId, taskId, { actual_value: valueInput.value })
+    await loadTasks()
+  }
+  editingValueTaskId.value = null
 }
 
 function priorityBadgeClass(priority: string) {
@@ -106,8 +122,33 @@ defineExpose({ refresh: loadTasks })
             {{ task.blocker_reason }}
           </div>
 
-          <div v-if="task.status === 'done' && !task.archived_at" class="pt-1">
+          <div v-if="task.status === 'done'" class="pt-1 flex items-center gap-2">
+            <template v-if="editingValueTaskId === task.id">
+              <input
+                v-model.number="valueInput"
+                type="number"
+                step="0.1"
+                min="0"
+                class="w-16 h-5 text-[11px] px-1 rounded border border-border bg-background"
+                :placeholder="t('blackboard.actualValue')"
+                @keyup.enter="saveValue(task.id)"
+                @keyup.escape="editingValueTaskId = null"
+              />
+              <button
+                class="text-[11px] text-green-400 hover:text-green-300 transition-colors"
+                @click="saveValue(task.id)"
+              >{{ t('blackboard.save') }}</button>
+            </template>
             <button
+              v-else
+              class="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              @click="startValueEdit(task)"
+            >
+              <DollarSign class="w-3 h-3" />
+              {{ t('blackboard.annotateValue') }}
+            </button>
+            <button
+              v-if="!task.archived_at"
               class="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               @click="onArchive(task.id)"
             >

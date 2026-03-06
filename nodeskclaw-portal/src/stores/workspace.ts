@@ -373,6 +373,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return res.data.data as ObjectiveInfo
   }
 
+  // ── Performance ──────────────────────────────────────
+
+  async function fetchPerformance(workspaceId: string) {
+    const res = await api.get(`/workspaces/${workspaceId}/performance`)
+    return res.data.data as Record<string, unknown>
+  }
+
+  async function collectPerformance(workspaceId: string) {
+    const res = await api.post(`/workspaces/${workspaceId}/performance/collect`)
+    return res.data.data as Record<string, unknown>
+  }
+
+  async function attributeTokens(workspaceId: string) {
+    const res = await api.post(`/workspaces/${workspaceId}/performance/attribute-tokens`)
+    return res.data.data as Record<string, unknown>
+  }
+
   // ── Members ───────────────────────────────────────
 
   async function fetchMembers(workspaceId: string) {
@@ -1089,6 +1106,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fetchObjectives,
     createObjective,
     updateObjective,
+    fetchPerformance,
+    collectPerformance,
+    attributeTokens,
     fetchMembers,
     fetchChatHistory,
     sendWorkspaceMessage,

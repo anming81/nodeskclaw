@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import TaskKanban from './TaskKanban.vue'
 import ObjectivePanel from './ObjectivePanel.vue'
+import RoiDashboard from './RoiDashboard.vue'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -34,6 +35,7 @@ const draft = ref('')
 const saving = ref(false)
 const taskKanbanRef = ref<InstanceType<typeof TaskKanban> | null>(null)
 const objectivePanelRef = ref<InstanceType<typeof ObjectivePanel> | null>(null)
+const roiDashboardRef = ref<InstanceType<typeof RoiDashboard> | null>(null)
 
 const fullContent = computed(() => store.blackboard?.content || '')
 
@@ -140,6 +142,7 @@ function nodeTypeLabel(type: string): string {
             <div class="space-y-6">
               <ObjectivePanel ref="objectivePanelRef" :workspace-id="workspaceId" />
               <TaskKanban ref="taskKanbanRef" :workspace-id="workspaceId" />
+              <RoiDashboard ref="roiDashboardRef" :workspace-id="workspaceId" />
             </div>
           </template>
 
