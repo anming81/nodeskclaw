@@ -203,23 +203,34 @@ class HookToFire:
 
 
 async def get_reachable_endpoints(
-    workspace_id: str, from_q: int, from_r: int, db: AsyncSession,
+    workspace_id: str,
+    from_q: int,
+    from_r: int,
+    db: AsyncSession,
+    *,
+    max_hops: int = 0,
+    visited_ids: set[str] | None = None,
 ) -> tuple[list[ReachableEndpoint], list[HookToFire]]:
     """BFS from (from_q, from_r) using registry-driven routing rules.
 
-    Returns (endpoints, hooks_to_fire) where hooks_to_fire lists nodes
-    whose type definitions include hooks like on_message_passing.
+    Args:
+        max_hops: stop expanding beyond this depth (0 = unlimited).
+        visited_ids: entity_ids already visited (for cycle prevention in delegation chains).
+
+    Returns (endpoints, hooks_to_fire).
     """
     hex_map = await _build_hex_map(workspace_id, db)
     adj = await _get_adjacency(workspace_id, db)
 
+    skip_entity_ids = visited_ids or set()
+
     endpoints: list[ReachableEndpoint] = []
     hooks_to_fire: list[HookToFire] = []
     visited: set[tuple[int, int]] = {(from_q, from_r)}
-    queue: deque[tuple[int, int]] = deque([(from_q, from_r)])
+    queue: deque[tuple[tuple[int, int], int]] = deque([((from_q, from_r), 0)])
 
     while queue:
-        current = queue.popleft()
+        current, hops = queue.popleft()
         for neighbor in adj.get(current, []):
             if neighbor in visited:
                 continue
@@ -228,21 +239,26 @@ async def get_reachable_endpoints(
             if node is None:
                 continue
 
+            entity_id = node.entity_id or ""
+            if entity_id in skip_entity_ids:
+                continue
+
             type_def = NODE_TYPE_REGISTRY.get(node.node_type)
 
             if _should_consume(node.node_type):
                 endpoints.append(ReachableEndpoint(
                     node.hex_q, node.hex_r, node.node_type,
-                    node.entity_id or "",
+                    entity_id,
                     display_name=node.display_name or "",
                 ))
 
             if _should_propagate(node.node_type):
-                queue.append(neighbor)
+                if max_hops <= 0 or hops + 1 < max_hops:
+                    queue.append((neighbor, hops + 1))
 
             if type_def and "on_message_passing" in (type_def.hooks or []):
                 hooks_to_fire.append(HookToFire(
-                    node_id=node.entity_id or "",
+                    node_id=entity_id,
                     node_type=node.node_type,
                     hook_name="on_message_passing",
                     hex_q=node.hex_q,

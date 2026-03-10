@@ -146,6 +146,7 @@ class MessageEnvelope:
                     "max_hops": self.data.routing.max_hops,
                     "ttl": self.data.routing.ttl,
                     "visited": self.data.routing.visited,
+                    "priority": self.data.routing.priority.value if self.data.routing.priority else None,
                 },
                 "scheduling": {
                     "delivery_mode": self.data.scheduling.delivery_mode.value,
@@ -177,6 +178,7 @@ class MessageEnvelope:
                 priority=Priority(data_dict.get("priority", "normal")),
             )
             routing_d = data_dict.get("routing", {})
+            _rp = routing_d.get("priority")
             msg_data.routing = MessageRouting(
                 mode=routing_d.get("mode", "multicast"),
                 target=routing_d.get("target", ""),
@@ -185,6 +187,7 @@ class MessageEnvelope:
                 max_hops=routing_d.get("max_hops", 5),
                 ttl=routing_d.get("ttl", 0),
                 visited=routing_d.get("visited", []),
+                priority=Priority(_rp) if _rp else None,
             )
             scheduling_d = data_dict.get("scheduling", {})
             msg_data.scheduling = MessageScheduling(

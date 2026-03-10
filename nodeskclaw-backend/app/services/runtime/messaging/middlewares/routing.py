@@ -42,27 +42,48 @@ async def _resolve_targets_by_name(
     return targets
 
 
-async def _resolve_broadcast(workspace_id: str, db) -> list[DeliveryTarget]:
-    """BFS from blackboard (0,0) to find all reachable endpoints via corridor topology."""
-    from app.services.corridor_router import get_blackboard_audience, has_any_connections
+async def _resolve_broadcast(
+    workspace_id: str, db, *, sender_id: str = "", max_hops: int = 0, visited: list[str] | None = None,
+) -> list[DeliveryTarget]:
+    """BFS from sender (or fallback to all addressable) to find reachable endpoints."""
+    from app.services.corridor_router import (
+        get_all_addressable_nodes,
+        get_reachable_endpoints,
+        has_any_connections,
+    )
     from app.services.runtime.registries.node_type_registry import NODE_TYPE_REGISTRY
 
     has_topo = await has_any_connections(workspace_id, db)
 
-    if has_topo:
-        endpoints = await get_blackboard_audience(workspace_id, db)
-        targets_list: list[DeliveryTarget] = []
-        for ep in endpoints:
-            type_spec = NODE_TYPE_REGISTRY.get(ep.endpoint_type)
-            transport = type_spec.transport if type_spec else ""
-            targets_list.append(DeliveryTarget(
-                node_id=ep.entity_id,
-                node_type=ep.endpoint_type,
-                transport=transport or "",
-            ))
-        return targets_list
+    if has_topo and sender_id:
+        from app.models.base import not_deleted
+        from app.models.node_card import NodeCard
+        from sqlalchemy import select
 
-    from app.services.corridor_router import get_all_addressable_nodes
+        src_q = await db.execute(
+            select(NodeCard.hex_q, NodeCard.hex_r).where(
+                NodeCard.node_id == sender_id,
+                NodeCard.workspace_id == workspace_id,
+                not_deleted(NodeCard),
+            ).limit(1)
+        )
+        src_row = src_q.first()
+        if src_row:
+            visited_set = set(visited) if visited else None
+            endpoints, _hooks = await get_reachable_endpoints(
+                workspace_id, src_row.hex_q, src_row.hex_r, db,
+                max_hops=max_hops, visited_ids=visited_set,
+            )
+            targets_list: list[DeliveryTarget] = []
+            for ep in endpoints:
+                type_spec = NODE_TYPE_REGISTRY.get(ep.endpoint_type)
+                transport = type_spec.transport if type_spec else ""
+                targets_list.append(DeliveryTarget(
+                    node_id=ep.entity_id,
+                    node_type=ep.endpoint_type,
+                    transport=transport or "",
+                ))
+            return targets_list
 
     addressable = await get_all_addressable_nodes(workspace_id, db)
     targets = []
@@ -75,6 +96,28 @@ async def _resolve_broadcast(workspace_id: str, db) -> list[DeliveryTarget]:
             transport=transport or "",
         ))
     return targets
+
+
+async def _resolve_anycast(
+    workspace_id: str, db, *, sender_id: str = "", max_hops: int = 0,
+) -> list[DeliveryTarget]:
+    """Select the single least-loaded reachable node that consumes messages."""
+    import random
+
+    from app.services.runtime.messaging.queue import get_queue_depth
+
+    candidates = await _resolve_broadcast(workspace_id, db, sender_id=sender_id, max_hops=max_hops)
+    if not candidates:
+        return []
+
+    scored: list[tuple[int, DeliveryTarget]] = []
+    for t in candidates:
+        depth = await get_queue_depth(db, t.node_id)
+        scored.append((depth, t))
+
+    min_depth = min(d for d, _ in scored)
+    best = [t for d, t in scored if d == min_depth]
+    return [random.choice(best)]
 
 
 def _simple_token_overlap(text_a: str, text_b: str) -> float:
@@ -135,10 +178,15 @@ class RoutingMiddleware(MessageMiddleware):
             return
 
         db = ctx.db
+        sender_id = data.sender.instance_id or data.sender.id
+        max_hops = data.routing.ttl if data.routing.ttl > 0 else 0
+        visited_list = data.routing.visited or []
 
         explicit_targets = data.routing.targets
         if not explicit_targets and data.routing.target:
             explicit_targets = [data.routing.target]
+
+        routing_mode = data.routing.mode if hasattr(data.routing, "mode") and data.routing.mode else ""
 
         if explicit_targets:
             mode = "unicast" if len(explicit_targets) == 1 else "multicast"
@@ -153,16 +201,31 @@ class RoutingMiddleware(MessageMiddleware):
                 mode=mode,
                 workspace_id=ctx.workspace_id,
             )
+        elif routing_mode == "anycast" and db is not None:
+            resolved = await _resolve_anycast(
+                ctx.workspace_id, db, sender_id=sender_id, max_hops=max_hops,
+            )
+            resolved = [t for t in resolved if t.node_id != sender_id]
+            from app.services.runtime.route_cache import route_table
+            topo_version = route_table.get_version(ctx.workspace_id)
+            ctx.delivery_plan = DeliveryPlan(
+                targets=[],
+                resolved_targets=resolved,
+                mode="anycast",
+                workspace_id=ctx.workspace_id,
+                topology_version=topo_version,
+            )
         else:
             from app.services.runtime.route_cache import route_table
 
             resolved = route_table.get(ctx.workspace_id)
             if resolved is None and db is not None:
-                resolved = await _resolve_broadcast(ctx.workspace_id, db)
+                resolved = await _resolve_broadcast(
+                    ctx.workspace_id, db,
+                    sender_id=sender_id, max_hops=max_hops, visited=visited_list,
+                )
                 route_table.put(ctx.workspace_id, resolved)
             resolved = resolved or []
-
-            sender_id = data.sender.instance_id or data.sender.id
             resolved = [t for t in resolved if t.node_id != sender_id]
 
             topo_version = route_table.get_version(ctx.workspace_id)
@@ -188,11 +251,10 @@ class RoutingMiddleware(MessageMiddleware):
 
         ctx.extra["backpressure_dropped"] = ctx.extra.get("backpressure_dropped", [])
         ctx.extra["hooks_to_fire"] = []
-        if ctx.delivery_plan.mode == "broadcast" and db is not None:
+        if ctx.delivery_plan.mode in ("broadcast", "anycast") and db is not None:
             try:
                 from app.services.corridor_router import get_reachable_endpoints
 
-                sender_id = data.sender.instance_id or data.sender.id
                 from app.models.base import not_deleted
                 from app.models.node_card import NodeCard
                 from sqlalchemy import select
@@ -206,8 +268,10 @@ class RoutingMiddleware(MessageMiddleware):
                 )
                 src_row = src_q.first()
                 if src_row:
+                    visited_set = set(visited_list) if visited_list else None
                     _eps, hooks = await get_reachable_endpoints(
                         ctx.workspace_id, src_row.hex_q, src_row.hex_r, db,
+                        max_hops=max_hops, visited_ids=visited_set,
                     )
                     ctx.extra["hooks_to_fire"] = [
                         {"node_id": h.node_id, "node_type": h.node_type, "hook": h.hook_name}
