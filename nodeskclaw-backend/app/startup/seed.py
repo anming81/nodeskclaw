@@ -1,0 +1,166 @@
+"""Idempotent seed data & runtime补建 — runs on every startup."""
+
+import json
+import logging
+import os
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+logger = logging.getLogger(__name__)
+
+
+async def run_seed(session_factory: async_sessionmaker[AsyncSession], *, is_ee: bool = False) -> None:
+    await _seed_default_org_and_templates(session_factory, is_ee=is_ee)
+    await _ensure_admin_memberships(session_factory)
+    await _ensure_workspace_schedules(session_factory)
+
+
+async def _seed_default_org_and_templates(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    is_ee: bool,
+) -> None:
+    async with session_factory() as db:
+        from app.models.org_membership import OrgMembership, OrgRole
+        from app.models.organization import Organization
+        from app.models.user import User
+
+        org_result = await db.execute(
+            select(Organization).where(Organization.deleted_at.is_(None))
+        )
+        default_org = org_result.scalars().first()
+
+        if default_org is None:
+            import uuid
+            default_org_id = str(uuid.uuid4())
+            default_org = Organization(
+                id=default_org_id,
+                name="Default Organization",
+                slug="default",
+                plan="pro",
+                max_instances=50,
+                max_cpu_total="200",
+                max_mem_total="400Gi",
+                max_storage_total="2000Gi",
+            )
+            db.add(default_org)
+            await db.flush()
+
+            users_result = await db.execute(
+                select(User).where(User.deleted_at.is_(None))
+            )
+            for u in users_result.scalars().all():
+                membership = OrgMembership(
+                    user_id=u.id,
+                    org_id=default_org.id,
+                    role=OrgRole.admin if u.role == "admin" else OrgRole.member,
+                )
+                db.add(membership)
+                u.current_org_id = default_org.id
+
+            from app.models.instance import Instance
+            inst_result = await db.execute(
+                select(Instance).where(
+                    Instance.org_id.is_(None),
+                    Instance.deleted_at.is_(None),
+                )
+            )
+            for inst in inst_result.scalars().all():
+                inst.org_id = default_org.id
+
+            await db.commit()
+            logger.info("种子数据：已创建默认组织并迁移现有数据")
+
+        if is_ee:
+            try:
+                from ee.backend.seed import seed_plans
+                await seed_plans(db)
+            except ImportError:
+                pass
+
+        from app.models.workspace_template import WorkspaceTemplate
+        preset_names = ["软件研发团队", "内容工作室", "研究实验室"]
+        preset_files = ["software_team.json", "content_studio.json", "research_lab.json"]
+        for pname, pfile in zip(preset_names, preset_files):
+            exists = await db.execute(
+                select(WorkspaceTemplate).where(
+                    WorkspaceTemplate.name == pname,
+                    WorkspaceTemplate.is_preset.is_(True),
+                    WorkspaceTemplate.deleted_at.is_(None),
+                ).limit(1)
+            )
+            if exists.scalar_one_or_none():
+                continue
+            path = os.path.join(os.path.dirname(__file__), "..", "presets", "workspace_templates", pfile)
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+                t = WorkspaceTemplate(
+                    id=str(__import__("uuid").uuid4()),
+                    name=data.get("name", pname),
+                    description=data.get("description", ""),
+                    is_preset=True,
+                    topology_snapshot=data.get("topology_snapshot", {}),
+                    blackboard_snapshot=data.get("blackboard_snapshot", {}),
+                    gene_assignments=data.get("gene_assignments", []),
+                    created_by=None,
+                )
+                db.add(t)
+        await db.commit()
+        logger.info("种子数据：预设办公室模板已就绪")
+
+
+async def _ensure_admin_memberships(session_factory: async_sessionmaker[AsyncSession]) -> None:
+    async with session_factory() as db:
+        from app.models.admin_membership import AdminMembership
+        from app.models.user import User
+
+        super_admins = await db.execute(
+            select(User).where(
+                User.is_super_admin.is_(True),
+                User.current_org_id.isnot(None),
+                User.deleted_at.is_(None),
+            )
+        )
+        for u in super_admins.scalars().all():
+            existing = await db.execute(
+                select(AdminMembership).where(
+                    AdminMembership.user_id == u.id,
+                    AdminMembership.org_id == u.current_org_id,
+                    AdminMembership.deleted_at.is_(None),
+                )
+            )
+            if existing.scalar_one_or_none() is None:
+                db.add(AdminMembership(user_id=u.id, org_id=u.current_org_id, role="admin"))
+                logger.info("种子数据：为超管用户 %s 创建 AdminMembership(admin)", u.name)
+        await db.commit()
+
+
+async def _ensure_workspace_schedules(session_factory: async_sessionmaker[AsyncSession]) -> None:
+    async with session_factory() as db:
+        from app.models.workspace import Workspace
+        from app.models.workspace_schedule import WorkspaceSchedule
+
+        all_ws = (await db.execute(
+            select(Workspace).where(Workspace.deleted_at.is_(None))
+        )).scalars().all()
+
+        for ws in all_ws:
+            existing = (await db.execute(
+                select(WorkspaceSchedule).where(
+                    WorkspaceSchedule.workspace_id == ws.id,
+                    WorkspaceSchedule.name == "任务巡检",
+                    WorkspaceSchedule.deleted_at.is_(None),
+                )
+            )).scalar_one_or_none()
+            if existing is None:
+                db.add(WorkspaceSchedule(
+                    workspace_id=ws.id,
+                    name="任务巡检",
+                    cron_expr="0 */4 * * *",
+                    message_template="请检查黑板待办任务队列，接取并执行优先级最高的任务。完成后汇报进展。",
+                    is_active=True,
+                ))
+        await db.commit()
+        logger.info("种子数据：已为 %d 个工作区检查/补建任务巡检定时器", len(all_ws))
