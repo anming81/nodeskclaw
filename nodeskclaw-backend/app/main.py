@@ -24,6 +24,29 @@ _log_formatter = logging.Formatter(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+
+class _ColorFormatter(logging.Formatter):
+    _COLORS = {
+        logging.DEBUG: "\033[37m",       # grey
+        logging.INFO: "\033[32m",        # green
+        logging.WARNING: "\033[33m",     # yellow
+        logging.ERROR: "\033[31m",       # red
+        logging.CRITICAL: "\033[1;31m",  # bold red
+    }
+    _RESET = "\033[0m"
+
+    def __init__(self):
+        super().__init__(
+            "%(asctime)s %(colored_level)s [%(name)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+    def format(self, record):
+        color = self._COLORS.get(record.levelno, "")
+        record.colored_level = f"{color}%(levelname)-5s{self._RESET}" % {"levelname": record.levelname}
+        return super().format(record)
+
+
 # 文件日志：10MB 单文件，保留 5 个历史文件（共 ~60MB）
 _file_handler = RotatingFileHandler(
     os.path.join(_LOG_DIR, "nodeskclaw.log"),
@@ -34,9 +57,9 @@ _file_handler = RotatingFileHandler(
 _file_handler.setFormatter(_log_formatter)
 _file_handler.setLevel(logging.INFO)
 
-# 控制台日志
+# 控制台日志（带颜色）
 _console_handler = logging.StreamHandler()
-_console_handler.setFormatter(_log_formatter)
+_console_handler.setFormatter(_ColorFormatter())
 _console_handler.setLevel(logging.INFO)
 
 # 应用到 root logger
