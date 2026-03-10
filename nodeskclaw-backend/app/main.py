@@ -1553,7 +1553,69 @@ async def lifespan(app: FastAPI):
         len(sse_listener_manager.connected_instances),
     )
 
+    # ── Runtime Platform v2 Startup ──────────────────
+    _pg_notify_service = None
+    _heartbeat_task = None
+    try:
+        if os.environ.get("OTEL_ENABLED", "").lower() in ("1", "true"):
+            from app.services.runtime.telemetry import init_telemetry
+            init_telemetry(service_name=settings.APP_NAME)
+            logger.info("Runtime v2: OpenTelemetry 已初始化")
+
+        async with async_session_factory() as _v2_db:
+            from app.services.runtime.registries.node_type_registry import NODE_TYPE_REGISTRY
+            await NODE_TYPE_REGISTRY.sync_to_db(_v2_db)
+            await _v2_db.commit()
+            logger.info("Runtime v2: NodeTypeRegistry 已同步到数据库")
+
+        from app.services.runtime.hooks.builtin import register_builtin_hooks
+        register_builtin_hooks()
+        logger.info("Runtime v2: 内置生命周期钩子已注册")
+
+        from app.services.runtime.pg_notify import PGNotifyService
+        _pg_notify_service = PGNotifyService()
+
+        async def _on_topology_changed(channel: str, payload: str):
+            from app.api.workspaces import broadcast_event
+            try:
+                import json as _json
+                data = _json.loads(payload) if payload else {}
+                ws_id = data.get("workspace_id", "")
+                if ws_id:
+                    broadcast_event(ws_id, "topology:changed", data)
+            except Exception:
+                pass
+
+        _pg_notify_service.subscribe("topology_changed", _on_topology_changed)
+        await _pg_notify_service.start_listening(engine)
+        logger.info("Runtime v2: PG LISTEN/NOTIFY 已启动")
+
+        from app.services.runtime.failure_recovery import run_heartbeat_scanner
+        _heartbeat_task = asyncio.create_task(run_heartbeat_scanner(engine))
+        logger.info("Runtime v2: SSE 心跳扫描已启动")
+
+        async with async_session_factory() as _mig_db:
+            from app.services.runtime.migration import run_full_migration
+            migrated = await run_full_migration(_mig_db)
+            if migrated > 0:
+                await _mig_db.commit()
+                logger.info("Runtime v2: 数据迁移完成，迁移了 %d 条记录", migrated)
+    except Exception as e:
+        logger.warning("Runtime v2 启动部分失败（非致命）: %s", e)
+
     yield
+
+    # ── Runtime Platform v2 Shutdown ─────────────────
+    try:
+        if _heartbeat_task and not _heartbeat_task.done():
+            _heartbeat_task.cancel()
+        if _pg_notify_service:
+            await _pg_notify_service.stop_listening()
+        from app.services.runtime.failure_recovery import shutdown_cleanup
+        await shutdown_cleanup(engine)
+        logger.info("Runtime v2: 已清理")
+    except Exception as e:
+        logger.warning("Runtime v2 关闭部分失败: %s", e)
 
     # ── Shutdown ─────────────────────────────────────
     for ws_client in feishu_ws_clients:
