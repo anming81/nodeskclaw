@@ -223,9 +223,9 @@ async def _seed_ee_platform_admin(
         if admin is None:
             plain_password = secrets.token_urlsafe(9)
             admin = User(
-                name="Platform Admin",
+                name="DeskClaw Admin",
                 username=account,
-                email="platform-admin@deskclaw.com",
+                email="deskclaw-admin@deskclaw.com",
                 role=UserRole.admin,
                 is_super_admin=True,
                 is_active=True,

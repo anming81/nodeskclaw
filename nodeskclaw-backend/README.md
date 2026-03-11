@@ -358,7 +358,7 @@ EE 平台管理员配置（仅 EE 模式生效）：
 
 | 变量 | 说明 |
 |------|------|
-| `INIT_EE_ADMIN_ACCOUNT` | EE Admin 后台管理员 username，默认 `platform-admin`。留空跳过，不能与 `INIT_ADMIN_ACCOUNT` 相同 |
+| `INIT_EE_ADMIN_ACCOUNT` | EE Admin 后台管理员 username，默认 `deskclaw-admin`。留空跳过，不能与 `INIT_ADMIN_ACCOUNT` 相同 |
 | `RESET_EE_ADMIN_PASSWORD` | 设为 `true` 后重启可强制重置 EE 管理员密码。默认 `false` |
 
 可选项：
@@ -531,7 +531,7 @@ EE 版本通过 `INIT_EE_ADMIN_ACCOUNT` 配置项创建独立的 Admin 后台管
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `INIT_EE_ADMIN_ACCOUNT` | `platform-admin` | Admin 后台管理员 username，留空则跳过 |
+| `INIT_EE_ADMIN_ACCOUNT` | `deskclaw-admin` | Admin 后台管理员 username，留空则跳过 |
 | `RESET_EE_ADMIN_PASSWORD` | `false` | 设为 `true` 后重启会强制重置管理员密码 |
 
 #### 权限体系

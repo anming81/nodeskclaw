@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     RESET_ADMIN_PASSWORD: bool = False  # 设为 True 后重启强制重置超管密码
 
     # ── EE 平台管理员 ─────────────────────────────────────
-    INIT_EE_ADMIN_ACCOUNT: str = "platform-admin"  # EE Admin 后台管理员 username，留空则跳过
+    INIT_EE_ADMIN_ACCOUNT: str = "deskclaw-admin"  # EE Admin 后台管理员 username，留空则跳过
     RESET_EE_ADMIN_PASSWORD: bool = False  # 设为 True 后重启强制重置 EE 管理员密码
 
     # ── Encryption (AES-256-GCM for KubeConfig) ─────────
