@@ -19,7 +19,7 @@ const ceRoutes: RouteRecordRaw[] = [
     path: '/force-change-password',
     name: 'ForceChangePassword',
     component: () => import('@/views/ForceChangePassword.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, hideNav: true },
   },
   {
     path: '/',
