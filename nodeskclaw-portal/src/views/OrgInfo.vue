@@ -2,17 +2,20 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useOrgStore } from '@/stores/org'
+import { useClusterStore } from '@/stores/cluster'
 import { useToast } from '@/composables/useToast'
 import { useEdition, useFeature } from '@/composables/useFeature'
 import { resolveApiErrorMessage } from '@/i18n/error'
-import { Pencil, Check, X, Loader2, Box, Cpu, HardDrive, Database } from 'lucide-vue-next'
+import { Pencil, Check, X, Loader2, Box, Cpu, HardDrive, Database, Server } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const orgStore = useOrgStore()
+const clusterStore = useClusterStore()
 const toast = useToast()
 const { isEE } = useEdition()
 const { isEnabled: hasBilling } = useFeature('billing')
 
+const hasCluster = computed(() => clusterStore.clusters.length > 0)
 const loading = ref(true)
 const editing = ref(false)
 const saving = ref(false)
@@ -136,8 +139,11 @@ const storagePercent = computed(() => {
 })
 
 onMounted(async () => {
-  await orgStore.fetchCurrentOrg()
-  if (hasBilling.value) {
+  await Promise.all([
+    orgStore.fetchCurrentOrg(),
+    clusterStore.fetchClusters(),
+  ])
+  if (hasBilling.value && hasCluster.value) {
     await orgStore.fetchUsage()
   }
   loading.value = false
@@ -226,7 +232,13 @@ onMounted(async () => {
     <!-- 资源用量（仅 billing 启用时） -->
     <section v-if="hasBilling" class="rounded-xl border border-border bg-card p-5">
       <h2 class="text-sm font-semibold text-muted-foreground mb-4">{{ t('orgUsage.title') }}</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div v-if="!hasCluster" class="flex flex-col items-center justify-center py-10 text-muted-foreground">
+        <Server class="w-8 h-8 mb-3 opacity-40" />
+        <p class="text-sm">{{ t('orgUsage.noClusterHint') }}</p>
+      </div>
+
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="p-4 rounded-lg border border-border bg-background space-y-3">
           <div class="flex items-center gap-2 text-sm font-medium">
             <Box class="w-4 h-4 text-blue-400" />

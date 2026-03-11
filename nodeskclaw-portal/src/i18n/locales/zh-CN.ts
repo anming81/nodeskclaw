@@ -626,6 +626,7 @@ const zhCN = {
     storage: "存储",
     usedPercent: "{percent}% 已使用",
     cpuUnit: "核",
+    noClusterHint: "请先配置集群以查看资源用量",
   },
   geneMarket: {
     title: "基因市场",

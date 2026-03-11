@@ -626,6 +626,7 @@ const enUS = {
     storage: "Storage",
     usedPercent: "{percent}% used",
     cpuUnit: "vCPU",
+    noClusterHint: "Please configure a cluster to view resource usage",
   },
   geneMarket: {
     title: "Gene Market",
