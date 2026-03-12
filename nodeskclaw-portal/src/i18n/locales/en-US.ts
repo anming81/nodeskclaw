@@ -534,6 +534,9 @@ const enUS = {
   instanceDetail: {
     workspaces: "Workspaces",
     cannotDeleteInWorkspaces: "This instance has joined the following offices: {names}. Please remove it first.",
+    endpointUrl: "Endpoint URL",
+    podStatus: "Pod Status",
+    containerStatus: "Container Status",
   },
   instanceList: {
     title: "AI Employee Management",
@@ -842,8 +845,14 @@ const enUS = {
       aws: "AWS",
       gcp: "GCP",
       azure: "Azure",
+      docker: "Docker",
       other: "Other",
     },
+    addDocker: "Add Docker Runtime",
+    addDockerSuccess: "Docker runtime created successfully",
+    addDockerFailed: "Failed to create Docker runtime",
+    dockerLabel: "Docker Runtime",
+    dockerDesc: "Local Docker environment",
     authType: {
       token: "Token",
       certificate: "Certificate",

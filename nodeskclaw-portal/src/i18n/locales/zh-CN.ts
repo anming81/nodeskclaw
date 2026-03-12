@@ -534,6 +534,9 @@ const zhCN = {
   instanceDetail: {
     workspaces: "所属办公室",
     cannotDeleteInWorkspaces: "该实例已加入以下办公室：{names}，请先移除后再删除",
+    endpointUrl: "访问地址",
+    podStatus: "Pod 状态",
+    containerStatus: "容器状态",
   },
   instanceList: {
     title: "AI 员工管理",
@@ -842,8 +845,14 @@ const zhCN = {
       aws: "AWS",
       gcp: "GCP",
       azure: "Azure",
+      docker: "Docker",
       other: "其他",
     },
+    addDocker: "添加 Docker 运行环境",
+    addDockerSuccess: "Docker 运行环境创建成功",
+    addDockerFailed: "Docker 运行环境创建失败",
+    dockerLabel: "Docker 运行环境",
+    dockerDesc: "本地 Docker 环境",
     authType: {
       token: "Token",
       certificate: "证书",
