@@ -289,8 +289,10 @@ deploy_service 根据 Instance.compute_provider 字段分发部署：
 | compute_provider | 实现 | 场景 |
 |------------------|------|------|
 | k8s（默认） | 内置 K8s 部署管道 + rolling update | 生产环境 |
-| docker | DockerComputeProvider | 本地开发/测试 |
+| docker | DockerComputeProvider | 本地开发/测试（端口 13000 起，数据在 ~/.nodeskclaw/docker-instances/） |
 | process | ProcessComputeProvider | 单机调试 |
+
+Docker 部署常量定义在 `app/services/docker_constants.py`。远程文件操作通过 `DockerFS`（主机直接读写）或 `PodFS`（kubectl exec）完成，由 `remote_fs()` 按 `compute_provider` 自动分发。
 
 ### Agent 生命周期
 
