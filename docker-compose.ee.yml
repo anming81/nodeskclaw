@@ -1,0 +1,13 @@
+services:
+  nodeskclaw-backend:
+    volumes:
+      - ./ee:/app/ee:ro
+
+  nodeskclaw-admin:
+    build:
+      context: ee/nodeskclaw-frontend
+    depends_on:
+      - nodeskclaw-backend
+    ports:
+      - "${ADMIN_PORT:-8001}:80"
+    restart: unless-stopped

@@ -318,7 +318,7 @@ lifespan 中依次初始化：EE Model 注册 → 自动创建开发数据库（
 
 - Python >= 3.12
 - [uv](https://docs.astral.sh/uv/) 已安装
-- PostgreSQL 可访问
+- PostgreSQL 可访问（本地安装或使用 `./dev.sh --docker-pg` 自动启动 Docker 容器）
 - 飞书开放平台应用已创建（需要 App ID 和 App Secret）
 
 ### 安装依赖
@@ -388,7 +388,24 @@ EE 平台管理员配置（仅 EE 模式生效）：
 uv run uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 3
 ```
 
-### Docker 构建
+### Docker Compose 部署
+
+推荐使用项目根目录的 `docker-compose.yml` 一键部署（内置 PostgreSQL + Backend + Portal）：
+
+```bash
+cp .env.example .env
+# 编辑 .env，至少设置 JWT_SECRET
+cd ..
+docker compose up -d
+```
+
+Docker Compose 部署注意事项：
+- `DATABASE_URL` 默认指向内置 PostgreSQL，无需手动配置
+- `DATABASE_NAME_SUFFIX` 在 Docker 部署时**必须留空**（compose 文件已强制覆盖为空字符串）。`auto` 模式会用容器 hostname（随机 ID）拼接库名导致连接失败
+- `CORS_ORIGINS` 需根据实际访问端口调整（Docker 默认 Portal 端口 80，Admin 端口 8001）
+- 如需使用外部数据库，在项目根目录 `.env` 设置 `DATABASE_URL`，然后 `docker compose up -d nodeskclaw-backend portal`
+
+### Docker 构建（单独构建镜像）
 
 后端镜像的 build context 是**项目根目录**（非 `nodeskclaw-backend/`），因为镜像需要包含 `openclaw-channel-nodeskclaw/` 插件源码（工作区 Agent 通信用）。
 

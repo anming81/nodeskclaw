@@ -97,52 +97,71 @@ Full-stack internationalization covering Portal, Admin, and Backend.
 
 ## Quick Start
 
-### Prerequisites
+### Docker Compose (recommended for deployment)
+
+Deploy the full platform with a built-in PostgreSQL -- no external database required.
+
+```bash
+cp nodeskclaw-backend/.env.example nodeskclaw-backend/.env
+# Edit .env -- at least set JWT_SECRET
+
+# CE
+docker compose up -d
+
+# EE (with Admin console)
+docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d
+```
+
+| Service | URL |
+|---|---|
+| Portal | http://localhost |
+| Backend API | http://localhost:8000 |
+| Admin (EE) | http://localhost:8001 |
+
+To use an external database instead of the built-in PostgreSQL, create a `.env` at project root with your `DATABASE_URL` and start only the services you need:
+
+```bash
+echo 'DATABASE_URL=postgresql+asyncpg://user:pass@your-rds:5432/nodeskclaw' > .env
+docker compose up -d nodeskclaw-backend portal
+```
+
+### Local Development
+
+#### Prerequisites
 
 | Dependency | |
 |---|---|
 | Python >= 3.12 + [uv](https://docs.astral.sh/uv/) | Backend runtime & package manager |
 | Node.js >= 18 + npm | Frontend runtime |
-| PostgreSQL | Database |
-| Feishu App | SSO (App ID + App Secret) |
+| PostgreSQL | Database (or use `--docker-pg` below) |
 
-### 1. Configure
+#### 1. Configure
 
 ```bash
 cd nodeskclaw-backend
 cp .env.example .env
-# Edit .env -- fill in the required values below
+# Edit .env -- fill in DATABASE_URL, JWT_SECRET, etc.
 ```
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:5432/dbname` |
-| `JWT_SECRET` | JWT signing key |
-| `ENCRYPTION_KEY` | KubeConfig AES key (32-byte base64) |
-| `FEISHU_APP_ID` | Feishu App ID |
-| `FEISHU_APP_SECRET` | Feishu App Secret |
-| `FEISHU_REDIRECT_URI` | `http://localhost:4518/api/v1/auth/feishu/callback` |
-
-### 2. One-command Start
+#### 2. One-command Start
 
 ```bash
-./dev.sh          # Auto-detect: ee/ exists -> EE, otherwise -> CE
-./dev.sh ce       # Force CE mode (backend + portal)
-./dev.sh ee       # Force EE mode (backend + portal + admin)
-./dev.sh --fresh  # Force reinstall all dependencies
+./dev.sh              # Auto-detect: ee/ exists -> EE, otherwise -> CE
+./dev.sh ce           # Force CE mode (backend + portal)
+./dev.sh ee           # Force EE mode (backend + portal + admin)
+./dev.sh --docker-pg  # Start a Docker PostgreSQL (no local PG install needed)
+./dev.sh --fresh      # Force reinstall all dependencies
 ```
 
-The script handles dependency installation, starts all services with colored log prefixes, and cleans up on Ctrl+C.
+The script handles dependency installation, starts all services with colored log prefixes, and cleans up on Ctrl+C. `--docker-pg` launches a local PostgreSQL container automatically.
 
 | Mode | Services | Ports |
 |------|----------|-------|
 | CE | backend + portal | 8000, 4517 |
 | EE | backend + portal + admin | 8000, 4517, 4518 |
 
-### Manual Start (alternative)
-
 <details>
-<summary>Start each service individually</summary>
+<summary>Manual Start (alternative)</summary>
 
 **Backend:**
 
@@ -174,11 +193,9 @@ Admin at `http://localhost:4518` | `/api` and `/stream` auto-proxy to backend.
 
 </details>
 
-### 3. Go
+#### 3. Go
 
 Open `http://localhost:4517` (Portal) or `http://localhost:4518` (Admin, EE), sign in.
-
-> Feishu redirect URL: `http://localhost:4518/api/v1/auth/feishu/callback`
 
 ## Documentation
 

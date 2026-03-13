@@ -17,10 +17,13 @@ RESET=$'\033[0m'
 
 PIDS=()
 FRESH=false
+DOCKER_PG=false
+DOCKER_PG_CONTAINER="nodeskclaw-pg"
+DOCKER_PG_VOLUME="nodeskclaw_pg_dev"
 
 usage() {
   cat <<EOF
-用法: ./dev.sh [ce|ee] [--fresh] [--help]
+用法: ./dev.sh [ce|ee] [--fresh] [--docker-pg] [--help]
 
 模式:
   (无参数)   自动检测：ee/ 存在 → EE，否则 → CE
@@ -28,8 +31,9 @@ usage() {
   ee         强制 EE 模式（backend + portal + admin）
 
 选项:
-  --fresh    强制重新安装依赖（删除 .venv / node_modules 后重装）
-  --help     显示本帮助
+  --fresh      强制重新安装依赖（删除 .venv / node_modules 后重装）
+  --docker-pg  使用 Docker 启动本地 PostgreSQL（无需自行安装 PG）
+  --help       显示本帮助
 
 服务端口:
   backend    http://localhost:8000
@@ -53,6 +57,10 @@ cleanup() {
   for pid in "${PIDS[@]}"; do
     wait "$pid" 2>/dev/null || true
   done
+  if [ "$DOCKER_PG" = true ]; then
+    log "停止 Docker PostgreSQL ($DOCKER_PG_CONTAINER)..."
+    docker stop "$DOCKER_PG_CONTAINER" 2>/dev/null || true
+  fi
   log "已停止。"
 }
 
@@ -65,6 +73,7 @@ for arg in "$@"; do
     ce)      MODE="ce" ;;
     ee)      MODE="ee" ;;
     --fresh) FRESH=true ;;
+    --docker-pg) DOCKER_PG=true ;;
     --help|-h) usage ;;
     *) err "未知参数: $arg"; usage ;;
   esac
@@ -83,6 +92,49 @@ fi
 if [ "$MODE" = "ee" ] && [ ! -d "$EE_DIR" ]; then
   err "EE 模式需要 ee/ 目录，请先运行 scripts/setup-ee.sh"
   exit 1
+fi
+
+# ── Docker PostgreSQL（可选）──────────────────────────────
+if [ "$DOCKER_PG" = true ]; then
+  if ! command -v docker &>/dev/null; then
+    err "未找到 docker，--docker-pg 需要 Docker"
+    exit 1
+  fi
+
+  if docker ps --format '{{.Names}}' | grep -q "^${DOCKER_PG_CONTAINER}$"; then
+    log "Docker PostgreSQL ($DOCKER_PG_CONTAINER) 已在运行"
+  else
+    if docker ps -a --format '{{.Names}}' | grep -q "^${DOCKER_PG_CONTAINER}$"; then
+      log "启动已存在的 Docker PostgreSQL..."
+      docker start "$DOCKER_PG_CONTAINER"
+    else
+      log "创建并启动 Docker PostgreSQL..."
+      docker run -d --name "$DOCKER_PG_CONTAINER" \
+        -p 5432:5432 \
+        -e POSTGRES_USER=nodeskclaw \
+        -e POSTGRES_PASSWORD=nodeskclaw \
+        -e POSTGRES_DB=nodeskclaw \
+        -v "$DOCKER_PG_VOLUME":/var/lib/postgresql/data \
+        postgres:16-alpine
+    fi
+
+    log "等待 PostgreSQL 就绪..."
+    for i in $(seq 1 30); do
+      if docker exec "$DOCKER_PG_CONTAINER" pg_isready -U nodeskclaw &>/dev/null; then
+        break
+      fi
+      if [ "$i" -eq 30 ]; then
+        err "PostgreSQL 启动超时"
+        exit 1
+      fi
+      sleep 1
+    done
+    log "PostgreSQL 就绪"
+  fi
+
+  export DATABASE_URL="postgresql+asyncpg://nodeskclaw:nodeskclaw@localhost:5432/nodeskclaw"
+  export DATABASE_NAME_SUFFIX=""
+  log "DATABASE_URL 已设置为 Docker PostgreSQL (localhost:5432)"
 fi
 
 # ── 前置检查 ──────────────────────────────────────────────
