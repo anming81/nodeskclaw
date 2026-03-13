@@ -48,3 +48,39 @@ alwaysApply: true
 - `kubectl logs`
 - `kubectl top`
 - `kubectl exec -- cat/ls/printenv` 等只读命令
+
+## 部署操作必须同时确认 context 和 namespace
+
+**部署脚本（`deploy/deploy.sh`）和 kubectl 操作必须同时明确 context 和 namespace，缺一不可。**
+
+同一个集群上可能同时存在生产和 staging 环境（不同 namespace），仅确认 context 不等于确认了目标环境。
+
+### 已知环境映射
+
+| 环境 | context | namespace |
+|------|---------|-----------|
+| 生产 | `nodesk-infra-vke-dev-dmz-01` | `nodeskclaw-system` |
+| staging | `nodesk-infra-vke-dev-dmz-01` | `nodeskclaw-staging` |
+| 实例集群 | `nodeskclaw-inst-dev-01` | 按实例动态分配 |
+
+### 必须做
+
+- 给用户提供部署命令时，**必须同时写明 `--context` 和 `--namespace`**，不依赖脚本默认值
+- 部署前先用 `kubectl get namespaces --context <ctx>` 确认目标 namespace 存在
+- 不确定用户要部署到哪个环境时，先列出可用环境（context + namespace 组合）让用户选择
+
+### 严禁
+
+- **禁止省略 `--namespace`**：`deploy.sh` 默认 namespace 是 `nodeskclaw-system`（生产），省略等于直接部署到生产
+- **禁止假设环境**：用户说"staging"就查 staging namespace，说"生产"就查生产 namespace，不要自己猜
+- **禁止只确认 context 不确认 namespace**：同一 context 下有多个环境，只确认 context 不够
+
+### 部署命令示例
+
+```bash
+# staging 部署
+./deploy/deploy.sh backend --context nodesk-infra-vke-dev-dmz-01 --namespace nodeskclaw-staging
+
+# 生产部署（需用户明确授权）
+./deploy/deploy.sh backend --context nodesk-infra-vke-dev-dmz-01 --namespace nodeskclaw-system
+```
