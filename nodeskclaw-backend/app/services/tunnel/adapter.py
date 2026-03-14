@@ -41,7 +41,11 @@ def _parse_delegation(response: str) -> tuple[str, str] | None:
 class _InstanceConnection:
     """Tracks a single WebSocket tunnel connection to an instance."""
 
-    __slots__ = ("ws", "instance_id", "connected_at", "last_pong", "msg_count_in", "msg_count_out", "_pending_responses")
+    __slots__ = (
+        "ws", "instance_id", "connected_at", "last_pong",
+        "msg_count_in", "msg_count_out",
+        "_pending_responses", "_stream_queues",
+    )
 
     def __init__(self, ws: WebSocket, instance_id: str) -> None:
         self.ws = ws
@@ -51,6 +55,7 @@ class _InstanceConnection:
         self.msg_count_in = 0
         self.msg_count_out = 0
         self._pending_responses: dict[str, asyncio.Future[TunnelMessage]] = {}
+        self._stream_queues: dict[str, asyncio.Queue[TunnelMessage]] = {}
 
     def create_response_future(self, request_id: str) -> asyncio.Future[TunnelMessage]:
         loop = asyncio.get_running_loop()
@@ -58,7 +63,19 @@ class _InstanceConnection:
         self._pending_responses[request_id] = fut
         return fut
 
+    def register_stream(self, request_id: str) -> "asyncio.Queue[TunnelMessage]":
+        q: asyncio.Queue[TunnelMessage] = asyncio.Queue()
+        self._stream_queues[request_id] = q
+        return q
+
+    def unregister_stream(self, request_id: str) -> None:
+        self._stream_queues.pop(request_id, None)
+
     def resolve_response(self, reply_to: str, msg: TunnelMessage) -> bool:
+        queue = self._stream_queues.get(reply_to)
+        if queue is not None:
+            queue.put_nowait(msg)
+            return True
         fut = self._pending_responses.pop(reply_to, None)
         if fut and not fut.done():
             fut.set_result(msg)
@@ -70,6 +87,7 @@ class _InstanceConnection:
             if not fut.done():
                 fut.cancel()
         self._pending_responses.clear()
+        self._stream_queues.clear()
 
 
 class TunnelAdapter:
@@ -701,43 +719,22 @@ class AsyncChatStream:
         self._conn = conn
         self._request_id = request_id
         self._trace_id = trace_id
-        self._queue: asyncio.Queue[TunnelMessage] = asyncio.Queue()
+        self._queue = conn.register_stream(request_id)
         self._done = False
-        self._original_resolve = conn.resolve_response
-
-        conn._pending_responses[request_id] = None  # type: ignore[assignment]
-        self._setup_streaming()
-
-    def _setup_streaming(self) -> None:
-        original = self._conn.resolve_response
-
-        def _streaming_resolve(reply_to: str, msg: TunnelMessage) -> bool:
-            if reply_to == self._request_id:
-                self._queue.put_nowait(msg)
-                if msg.type in (TunnelMessageType.CHAT_RESPONSE_DONE, TunnelMessageType.CHAT_RESPONSE_ERROR):
-                    self._done = True
-                return True
-            return original(reply_to, msg)
-
-        self._conn.resolve_response = _streaming_resolve  # type: ignore[assignment]
 
     def __aiter__(self):
         return self
 
     async def __anext__(self) -> TunnelMessage:
         if self._done and self._queue.empty():
-            self._restore()
+            self._conn.unregister_stream(self._request_id)
             raise StopAsyncIteration
         try:
             msg = await asyncio.wait_for(self._queue.get(), timeout=120)
             if msg.type in (TunnelMessageType.CHAT_RESPONSE_DONE, TunnelMessageType.CHAT_RESPONSE_ERROR):
-                self._restore()
+                self._done = True
+                self._conn.unregister_stream(self._request_id)
             return msg
         except asyncio.TimeoutError:
-            self._restore()
+            self._conn.unregister_stream(self._request_id)
             raise StopAsyncIteration
-
-    def _restore(self) -> None:
-        self._conn._pending_responses.pop(self._request_id, None)
-        if hasattr(self, "_original_resolve"):
-            self._conn.resolve_response = self._original_resolve  # type: ignore[assignment]
