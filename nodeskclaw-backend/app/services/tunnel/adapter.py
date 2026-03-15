@@ -684,7 +684,7 @@ class TunnelAdapter:
                     ws_ids = [r[0] for r in result.all()]
 
                 from app.api.workspaces import broadcast_event
-                event_name = "agent:tunnel_connected" if connected else "agent:tunnel_disconnected"
+                event_name = "agent:sse_connected" if connected else "agent:sse_disconnected"
                 for ws_id in ws_ids:
                     broadcast_event(ws_id, event_name, {"instance_id": instance_id})
 

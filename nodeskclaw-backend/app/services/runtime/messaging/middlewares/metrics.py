@@ -23,7 +23,7 @@ class MetricsMiddleware(MessageMiddleware):
         try:
             from app.services.runtime.telemetry import producer_span, record_message_sent
 
-            with producer_span(ctx.envelope) as span:
+            with producer_span("deliver", ctx.envelope.id, ctx.envelope.workspaceid, ctx.envelope.traceid) as span:
                 await next_fn(ctx)
 
                 elapsed_ms = (time.monotonic() - start) * 1000
@@ -33,15 +33,15 @@ class MetricsMiddleware(MessageMiddleware):
                 if ctx.error:
                     self._total_errors += 1
                     from app.services.runtime.telemetry import record_message_failed
-                    record_message_failed(ctx.envelope, ctx.error)
+                    record_message_failed(ctx.envelope.workspaceid, "", ctx.error or "")
                     if span:
                         span.set_status_error(ctx.error)
                 else:
-                    record_message_sent(ctx.envelope)
+                    record_message_sent(ctx.envelope.workspaceid, ctx.envelope.type)
                     delivered = [r for r in ctx.delivery_results if r.success]
                     for r in delivered:
                         from app.services.runtime.telemetry import record_response_latency
-                        record_response_latency(r.latency_ms)
+                        record_response_latency(r.latency_ms / 1000, ctx.envelope.workspaceid, "")
         except ImportError:
             await next_fn(ctx)
             elapsed_ms = (time.monotonic() - start) * 1000
