@@ -602,11 +602,23 @@ async def _deploy_plugin_files(fs: RemoteFS, plugin_source: Path) -> None:
             )
 
 
+def _docker_rewrite_url(url: str) -> str:
+    """Docker 容器内 localhost/127.0.0.1 不可达宿主机，替换为 host.docker.internal。"""
+    return re.sub(
+        r"(https?://|wss?://)(localhost|127\.0\.0\.1)(:\d+)?",
+        r"\1host.docker.internal\3",
+        url,
+    )
+
+
 def _make_account_entry(instance: Instance, workspace_id: str) -> dict:
     """Build a single nodeskclaw account entry for a workspace."""
+    api_url = settings.AGENT_API_BASE_URL
+    if instance.compute_provider == "docker":
+        api_url = _docker_rewrite_url(api_url)
     return {
         "enabled": True,
-        "apiUrl": settings.AGENT_API_BASE_URL,
+        "apiUrl": api_url,
         "workspaceId": workspace_id,
         "instanceId": instance.id,
         "apiToken": json.loads(instance.env_vars or "{}").get(
@@ -628,7 +640,10 @@ def _inject_channel_config(
         config["channels"] = {}
     ch = config["channels"].setdefault("nodeskclaw", {})
     if settings.TUNNEL_BASE_URL:
-        ch["tunnelUrl"] = settings.TUNNEL_BASE_URL
+        tunnel_url = settings.TUNNEL_BASE_URL
+        if instance.compute_provider == "docker":
+            tunnel_url = _docker_rewrite_url(tunnel_url)
+        ch["tunnelUrl"] = tunnel_url
     accounts = ch.setdefault("accounts", {})
     entry = _make_account_entry(instance, workspace_id)
     accounts[workspace_id] = entry
