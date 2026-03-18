@@ -45,6 +45,7 @@ const props = withDefaults(defineProps<{
   decoratingHexKey?: string | null
   isDecorationMode?: boolean
   perfSummary?: PerfSummary | null
+  perfLoading?: boolean
 }>(), {
   isDecorationMode: false,
 })
@@ -516,13 +517,13 @@ const emptyHexes = computed(() => {
         <text v-if="perfSummary" x="0" y="-2" text-anchor="middle" fill="#9ca3af" font-size="9">
           {{ t('workspaceView.bbInputLine', { done: perfSummary.completedTasks, tasks: perfSummary.totalTasks }) }}
         </text>
-        <text v-else x="0" y="-2" text-anchor="middle" fill="#9ca3af" font-size="9">
+        <text v-else-if="!perfLoading" x="0" y="-2" text-anchor="middle" fill="#9ca3af" font-size="9">
           {{ blackboardContent?.slice(0, 24) || t('workspaceView.bbNoSummary') }}{{ (blackboardContent?.length ?? 0) > 24 ? '...' : '' }}
         </text>
         <text v-if="perfSummary" x="0" y="16" text-anchor="middle" fill="#6b7280" font-size="8">
           {{ t('workspaceView.bbOutputLine', { value: formatK(perfSummary.totalValueCreated) }) }}
         </text>
-        <text v-else x="0" y="16" text-anchor="middle" fill="#6b7280" font-size="8">
+        <text v-else-if="!perfLoading" x="0" y="16" text-anchor="middle" fill="#6b7280" font-size="8">
           {{ blackboardContent?.slice(24, 54) || '' }}{{ (blackboardContent?.length ?? 0) > 54 ? '...' : '' }}
         </text>
       </g>

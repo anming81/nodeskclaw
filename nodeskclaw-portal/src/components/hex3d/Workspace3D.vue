@@ -33,6 +33,7 @@ const props = defineProps<{
   isMovingHex?: boolean
   movingHexSource?: { q: number, r: number } | null
   perfSummary?: PerfSummary | null
+  perfLoading?: boolean
 }>()
 
 function formatK(n: number): string {
@@ -267,7 +268,7 @@ function drawBBLabelCanvas(canvas: HTMLCanvasElement) {
       t('workspaceView.bbOutputLine', { value: formatK(ps.totalValueCreated) }),
       128, 62,
     )
-  } else if (props.blackboardContent) {
+  } else if (!props.perfLoading && props.blackboardContent) {
     ctx.font = '14px sans-serif'
     ctx.fillStyle = '#9ca3af'
     const text = props.blackboardContent.length > 20

@@ -263,8 +263,10 @@ interface PerfSummary {
   totalValueCreated: number
 }
 const perfSummary = ref<PerfSummary | null>(null)
+const perfLoading = ref(true)
 
 async function loadPerfSummary(wsId: string) {
+  perfLoading.value = true
   try {
     const data = await store.fetchPerformance(wsId)
     if (data) {
@@ -277,6 +279,8 @@ async function loadPerfSummary(wsId: string) {
     }
   } catch {
     perfSummary.value = null
+  } finally {
+    perfLoading.value = false
   }
 }
 
@@ -315,7 +319,7 @@ onMounted(async () => {
   await store.fetchTopology(workspaceId.value)
   await store.fetchMembers(workspaceId.value)
   await store.fetchDecoration(workspaceId.value)
-  loadPerfSummary(workspaceId.value)
+  await loadPerfSummary(workspaceId.value)
 
   store.connectSSE(workspaceId.value, onSSEEvent)
   window.addEventListener('keydown', handleKeydown)
@@ -1045,6 +1049,7 @@ function handleKeydown(e: KeyboardEvent) {
             :is-moving-hex="highlightEmptyHexes"
             :moving-hex-source="movingHexSource"
             :perf-summary="perfSummary"
+            :perf-loading="perfLoading"
             @hex-click="onHexClick"
             @agent-dblclick="onAgentDblClick"
           />
@@ -1073,6 +1078,7 @@ function handleKeydown(e: KeyboardEvent) {
             :decorating-hex-key="decoratingHexKey"
             :is-decoration-mode="decorationMode"
             :perf-summary="perfSummary"
+            :perf-loading="perfLoading"
             @hex-click="onHexClick"
             @agent-dblclick="onAgentDblClick"
             @decoration-hex-click="onDecorationHexClick"
