@@ -49,7 +49,7 @@ def _build_compose_yaml(config: InstanceComputeConfig) -> dict:
         "image": config.env_vars.get("DOCKER_IMAGE", f"deskclaw:{config.image_version}"),
         "container_name": config.slug,
         "environment": {k: str(v) for k, v in config.env_vars.items()},
-        "ports": [f"{host_port}:3000"],
+        "ports": [f"{host_port}:18789"],
         "volumes": [f"{DOCKER_DATA_DIR / config.slug / 'data'}:/root/.openclaw"],
         "restart": "unless-stopped",
         "platform": "linux/amd64",
