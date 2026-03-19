@@ -224,81 +224,8 @@ class FeishuChannelStrategy:
         return hmac.compare_digest(expected, signature)
 
 
-class DingTalkChannelStrategy:
-    channel_id = "dingtalk"
-
-    async def deliver(
-        self,
-        *,
-        workspace_id: str,
-        target_node_id: str,
-        user_id: str,
-        source_name: str,
-        content: str,
-        envelope: MessageEnvelope,
-        channel_config: dict,
-    ) -> bool:
-        from app.core.config import settings
-
-        app_key = settings.DINGTALK_APP_KEY
-        app_secret = settings.DINGTALK_APP_SECRET
-        if not app_key or not app_secret:
-            return False
-
-        delivery_config: dict = {}
-
-        if channel_config.get("open_conversation_id"):
-            delivery_config["open_conversation_id"] = channel_config["open_conversation_id"]
-            delivery_config["robot_code"] = channel_config.get("robot_code", app_key)
-        elif user_id:
-            from app.core.deps import async_session_factory
-            from app.services.channel_adapters.dingtalk import get_dingtalk_staff_id
-
-            async with async_session_factory() as db:
-                staff_id = await get_dingtalk_staff_id(user_id, db)
-            if staff_id:
-                delivery_config["staff_id"] = staff_id
-                delivery_config["robot_code"] = channel_config.get("robot_code", app_key)
-
-        if not delivery_config:
-            return False
-
-        try:
-            from app.services.channel_adapters.dingtalk import DingTalkChannelAdapter
-
-            workspace_name = ""
-            from app.core.deps import async_session_factory
-            from app.models.workspace import Workspace
-
-            async with async_session_factory() as db:
-                ws_q = await db.execute(
-                    select(Workspace.name).where(
-                        Workspace.id == workspace_id,
-                        not_deleted(Workspace),
-                    )
-                )
-                workspace_name = ws_q.scalar_one_or_none() or ""
-
-            adapter = DingTalkChannelAdapter(app_key=app_key, app_secret=app_secret)
-            return await adapter.send_message(
-                channel_config=delivery_config,
-                sender_name=source_name,
-                content=content,
-                workspace_name=workspace_name,
-            )
-        except Exception as e:
-            logger.error("DingTalk delivery failed: %s", e)
-            return False
-
-    async def receive_webhook(self, payload: dict, headers: dict) -> dict | None:
-        return None
-
-    async def verify_signature(self, payload: bytes, headers: dict, secret: str) -> bool:
-        return True
-
-
 class ChannelTransportAdapter:
-    """Delivers messages to human nodes via channel strategies (Feishu, DingTalk, SSE, etc.)."""
+    """Delivers messages to human nodes via channel strategies (Feishu, SSE, etc.)."""
 
     transport_id = "channel"
 
@@ -306,7 +233,6 @@ class ChannelTransportAdapter:
         self._strategies: dict[str, ChannelStrategy] = {}
         self.register_channel(SSEChannelStrategy())
         self.register_channel(FeishuChannelStrategy())
-        self.register_channel(DingTalkChannelStrategy())
         self.register_channel(OfflineQueueStrategy())
 
     def register_channel(self, strategy: ChannelStrategy) -> None:

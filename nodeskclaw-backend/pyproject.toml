@@ -34,8 +34,6 @@ dependencies = [
     "alembic>=1.13.0",
     # TOML write support (ZeroClaw config)
     "tomli_w>=1.0.0",
-    # DingTalk Stream SDK (Phase 2: bidirectional messaging)
-    "dingtalk-stream>=0.24.3",
 ]
 
 [dependency-groups]

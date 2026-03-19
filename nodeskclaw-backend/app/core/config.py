@@ -89,10 +89,6 @@ class Settings(BaseSettings):
     FEISHU_APP_ID_PORTAL: str = ""
     FEISHU_APP_SECRET_PORTAL: str = ""
 
-    # ── 钉钉 Channel（Platform 层消息投递凭证）───────────
-    DINGTALK_APP_KEY: str = ""
-    DINGTALK_APP_SECRET: str = ""
-
     # ── Portal ────────────────────────────────────────────
     PORTAL_BASE_URL: str = ""  # 用户门户基础 URL，如 https://portal.example.com
 

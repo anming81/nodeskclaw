@@ -49,13 +49,6 @@ CHANNEL_REGISTRY.register(ChannelSpec(
 ))
 
 CHANNEL_REGISTRY.register(ChannelSpec(
-    channel_id="dingtalk",
-    description="DingTalk channel — enterprise messaging via DingTalk bot API.",
-    supports_rich_content=True,
-    supports_bidirectional=True,
-))
-
-CHANNEL_REGISTRY.register(ChannelSpec(
     channel_id="sse",
     description="SSE channel — browser-based real-time event stream.",
     supports_rich_content=False,
