@@ -733,6 +733,8 @@ class TunnelAdapter:
 
             async def _do_broadcast():
                 from sqlalchemy import select
+
+                resolved_status: str | None = None
                 async with async_session_factory() as db:
                     result = await db.execute(
                         select(WorkspaceAgent.workspace_id).where(
@@ -742,10 +744,34 @@ class TunnelAdapter:
                     )
                     ws_ids = [r[0] for r in result.all()]
 
+                    if connected:
+                        from app.models.instance import Instance, InstanceStatus
+                        inst = await db.get(Instance, instance_id)
+                        _transitional = {
+                            InstanceStatus.restarting, InstanceStatus.deploying,
+                            InstanceStatus.updating, InstanceStatus.creating,
+                        }
+                        if inst and inst.status in _transitional:
+                            old_status = inst.status
+                            inst.status = InstanceStatus.running
+                            inst.health_status = "unknown"
+                            await db.commit()
+                            resolved_status = "running"
+                            logger.info(
+                                "隧道连接触发状态恢复: instance=%s %s -> running",
+                                instance_id, old_status,
+                            )
+
                 from app.api.workspaces import broadcast_event
                 event_name = "agent:sse_connected" if connected else "agent:sse_disconnected"
                 for ws_id in ws_ids:
                     broadcast_event(ws_id, event_name, {"instance_id": instance_id})
+
+                if resolved_status:
+                    for ws_id in ws_ids:
+                        broadcast_event(ws_id, "agent:status", {
+                            "instance_id": instance_id, "status": resolved_status,
+                        })
 
             asyncio.create_task(_do_broadcast())
         except Exception as e:
