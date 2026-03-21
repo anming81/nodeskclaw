@@ -21,14 +21,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-OPENCLAW_CONFIG_REL = ".openclaw/openclaw.json"
-SKILLS_DIR_REL = ".openclaw/skills"
-SKILLS_EXTRA_DIR = "/root/.openclaw/skills"
-SCRIPTS_DIR_REL = ".deskclaw/tools"
-_SESSIONS_REL = ".openclaw/agents/main/sessions/sessions.json"
-
 
 class OpenClawGeneInstallAdapter(GeneInstallAdapter):
+
+    def __init__(
+        self,
+        config_rel_path: str = ".openclaw/openclaw.json",
+        skills_dir_rel: str = ".openclaw/skills",
+        skills_extra_dir: str = "/root/.openclaw/skills",
+        scripts_dir_rel: str = ".deskclaw/tools",
+    ):
+        self._config_path = config_rel_path
+        self._skills_dir = skills_dir_rel
+        self._skills_extra_dir = skills_extra_dir
+        self._scripts_dir = scripts_dir_rel
 
     async def deploy_skill(
         self, fs: RemoteFS, skill_name: str, content: str, description: str = "",
@@ -38,8 +44,8 @@ class OpenClawGeneInstallAdapter(GeneInstallAdapter):
             front_matter = f"---\nname: {skill_name}\ndescription: {desc}\n---\n\n"
             content = front_matter + content
 
-        await fs.mkdir(f"{SKILLS_DIR_REL}/{skill_name}")
-        await fs.write_text(f"{SKILLS_DIR_REL}/{skill_name}/SKILL.md", content)
+        await fs.mkdir(f"{self._skills_dir}/{skill_name}")
+        await fs.write_text(f"{self._skills_dir}/{skill_name}/SKILL.md", content)
         await self._ensure_skills_discovery(fs)
 
     async def allow_tools(self, fs: RemoteFS, tool_names: list[str]) -> None:
@@ -61,9 +67,9 @@ class OpenClawGeneInstallAdapter(GeneInstallAdapter):
     async def deploy_scripts(self, fs: RemoteFS, scripts: dict[str, str]) -> None:
         if not scripts:
             return
-        await fs.mkdir(SCRIPTS_DIR_REL)
+        await fs.mkdir(self._scripts_dir)
         for filename, content in scripts.items():
-            await fs.write_text(f"{SCRIPTS_DIR_REL}/{filename}", content)
+            await fs.write_text(f"{self._scripts_dir}/{filename}", content)
 
     async def apply_config(self, fs: RemoteFS, config_patch: dict) -> None:
         if not config_patch:
@@ -85,7 +91,7 @@ class OpenClawGeneInstallAdapter(GeneInstallAdapter):
         await inject_evolution_notification(fs, skill_name, event)
 
     async def remove_skill(self, fs: RemoteFS, skill_name: str) -> None:
-        await fs.remove(f"{SKILLS_DIR_REL}/{skill_name}")
+        await fs.remove(f"{self._skills_dir}/{skill_name}")
 
     async def post_remove_cleanup(self, fs: RemoteFS, skill_name: str) -> None:
         from app.services.openclaw_session import (
@@ -102,12 +108,12 @@ class OpenClawGeneInstallAdapter(GeneInstallAdapter):
         skills = config.setdefault("skills", {})
         load = skills.setdefault("load", {})
         extra_dirs = load.setdefault("extraDirs", [])
-        if SKILLS_EXTRA_DIR not in extra_dirs:
-            extra_dirs.append(SKILLS_EXTRA_DIR)
+        if self._skills_extra_dir not in extra_dirs:
+            extra_dirs.append(self._skills_extra_dir)
             await self._write_config(fs, config)
 
     async def _read_config(self, fs: RemoteFS) -> dict:
-        raw = await fs.read_text(OPENCLAW_CONFIG_REL)
+        raw = await fs.read_text(self._config_path)
         if raw is None:
             return {}
         try:
@@ -117,6 +123,6 @@ class OpenClawGeneInstallAdapter(GeneInstallAdapter):
 
     async def _write_config(self, fs: RemoteFS, config: dict) -> None:
         await fs.write_text(
-            OPENCLAW_CONFIG_REL,
+            self._config_path,
             json.dumps(config, indent=2, ensure_ascii=False),
         )

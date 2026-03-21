@@ -30,7 +30,12 @@ class NoopGeneInstallAdapter(GeneInstallAdapter):
         await fs.write_text(f"{SKILLS_DIR_REL}/{skill_name}/SKILL.md", content)
 
     async def allow_tools(self, fs: RemoteFS, tool_names: list[str]) -> None:
-        pass
+        if tool_names:
+            logger.warning(
+                "NoopGeneInstallAdapter: allow_tools(%s) called but no runtime-specific "
+                "implementation — tools may not be available to the agent",
+                tool_names,
+            )
 
     async def deploy_scripts(self, fs: RemoteFS, scripts: dict[str, str]) -> None:
         if not scripts:
@@ -40,7 +45,12 @@ class NoopGeneInstallAdapter(GeneInstallAdapter):
             await fs.write_text(f"{SCRIPTS_DIR_REL}/{filename}", content)
 
     async def apply_config(self, fs: RemoteFS, config_patch: dict) -> None:
-        pass
+        if config_patch:
+            logger.warning(
+                "NoopGeneInstallAdapter: apply_config called but no runtime-specific "
+                "implementation — config patch dropped: %s",
+                list(config_patch.keys()),
+            )
 
     async def invalidate_cache(self, fs: RemoteFS, skill_name: str, event: str = "installed") -> None:
         logger.debug("NoopGeneInstallAdapter: cache invalidation not implemented for skill=%s", skill_name)
@@ -49,4 +59,8 @@ class NoopGeneInstallAdapter(GeneInstallAdapter):
         await fs.remove(f"{SKILLS_DIR_REL}/{skill_name}")
 
     async def post_remove_cleanup(self, fs: RemoteFS, skill_name: str) -> None:
-        pass
+        logger.debug(
+            "NoopGeneInstallAdapter: post_remove_cleanup skipped for skill=%s "
+            "(no runtime-specific cleanup logic)",
+            skill_name,
+        )

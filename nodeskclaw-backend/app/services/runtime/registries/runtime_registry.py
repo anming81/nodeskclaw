@@ -31,6 +31,8 @@ class RuntimeSpec:
     field_naming: str = "camelCase"
     supports_channel_plugins: bool = True
     data_dir_container_path: str = "/root/.openclaw"
+    skills_dir_rel: str = ".openclaw/skills"
+    scripts_dir_rel: str = ".deskclaw/tools"
     has_web_ui: bool = True
     has_init_script: bool = True
 
@@ -57,7 +59,12 @@ def _register_builtins() -> None:
     from app.services.runtime.noop_gene_install_adapter import NoopGeneInstallAdapter
     from app.services.runtime.openclaw_gene_install_adapter import OpenClawGeneInstallAdapter
 
-    _openclaw_gene_adapter = OpenClawGeneInstallAdapter()
+    _openclaw_gene_adapter = OpenClawGeneInstallAdapter(
+        config_rel_path=".openclaw/openclaw.json",
+        skills_dir_rel=".openclaw/skills",
+        skills_extra_dir="/root/.openclaw/skills",
+        scripts_dir_rel=".deskclaw/tools",
+    )
     _noop_gene_adapter = NoopGeneInstallAdapter()
 
     RUNTIME_REGISTRY.register(RuntimeSpec(
@@ -92,6 +99,7 @@ def _register_builtins() -> None:
         field_naming="snake_case",
         supports_channel_plugins=False,
         data_dir_container_path="/root/.zeroclaw",
+        skills_dir_rel=".deskclaw/skills",
         has_web_ui=False,
         has_init_script=False,
     ))
@@ -115,6 +123,7 @@ def _register_builtins() -> None:
         field_naming="camelCase",
         supports_channel_plugins=False,
         data_dir_container_path="/root/.nanobot",
+        skills_dir_rel=".deskclaw/skills",
         has_web_ui=False,
         has_init_script=False,
     ))

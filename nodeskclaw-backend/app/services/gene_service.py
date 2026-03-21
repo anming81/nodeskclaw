@@ -42,15 +42,7 @@ from app.schemas.gene import (
 )
 from app.services.registry_aggregator import get_aggregator
 from app.services.nfs_mount import RemoteFS, SkillScanError, remote_fs
-from app.services.openclaw_session import (
-    ensure_skills_discovery,
-    inject_evolution_notification,
-    invalidate_skill_snapshots,
-)
 from app.services.runtime.gene_install_adapter import GeneInstallAdapter
-
-OPENCLAW_CONFIG_REL = ".openclaw/openclaw.json"
-SKILLS_DIR_REL = ".openclaw/skills"
 
 logger = logging.getLogger(__name__)
 
@@ -313,11 +305,11 @@ def _validate_skill_metadata(
     short_description: str | None,
     description: str | None,
 ) -> None:
-    """Reject gene creation when skill metadata is insufficient for OpenClaw discovery.
+    """Reject gene creation when skill metadata is insufficient for runtime discovery.
 
-    OpenClaw requires YAML front matter (name + description) in SKILL.md.
+    Most runtimes require YAML front matter (name + description) in SKILL.md.
     Either the skill content must already include front matter, or the gene
-    must provide a description that _write_skill_file can use to generate it.
+    must provide a description so the adapter can generate it during deployment.
     """
     if not manifest or "skill" not in manifest:
         return
@@ -829,9 +821,13 @@ async def get_instance_skills(db: AsyncSession, instance_id: str) -> list[dict]:
     )
     ig_rows = ig_result.all()
 
+    from app.services.runtime.registries.runtime_registry import RUNTIME_REGISTRY
+    spec = RUNTIME_REGISTRY.get(instance.runtime)
+    skills_dir = spec.skills_dir_rel if spec else ".openclaw/skills"
+
     try:
         async with remote_fs(instance, db) as fs:
-            pod_skills = await fs.scan_skills(SKILLS_DIR_REL)
+            pod_skills = await fs.scan_skills(skills_dir)
     except SkillScanError:
         logger.warning("scan_skills failed, returning DB-only data for %s", instance_id)
         return _build_db_only_items(ig_rows)
@@ -1154,12 +1150,14 @@ async def install_gene_prerestart(instance_id: str, gene_slug: str) -> None:
                         fs, skill_name, skill_content,
                         gene.short_description or gene.description or "",
                     )
-                    await _apply_engineering_actions_via_adapter(fs, manifest, adapter)
+                    await _apply_manifest_actions(fs, manifest, adapter)
                     await adapter.invalidate_cache(fs, skill_name, "installed")
 
                 ig.status = InstanceGeneStatus.installed
                 ig.installed_at = datetime.now(timezone.utc)
-                ig.config_snapshot = _json_dumps(manifest.get("openclaw_config"))
+                ig.config_snapshot = _json_dumps(
+                    manifest.get("runtime_config") or manifest.get("openclaw_config")
+                )
                 await _record_evolution(
                     db, instance_id, EvolutionEventType.learned, gene.name,
                     gene_slug=gene.slug, gene_id=gene.id,
@@ -1269,12 +1267,14 @@ async def _direct_install(
                         fs, skill_name, skill_content,
                         gene.short_description or gene.description or "",
                     )
-                    await _apply_engineering_actions_via_adapter(fs, manifest, adapter)
+                    await _apply_manifest_actions(fs, manifest, adapter)
                     await adapter.invalidate_cache(fs, skill_name, "installed")
 
                 ig.status = InstanceGeneStatus.installed
                 ig.installed_at = datetime.now(timezone.utc)
-                ig.config_snapshot = _json_dumps(manifest.get("openclaw_config"))
+                ig.config_snapshot = _json_dumps(
+                    manifest.get("runtime_config") or manifest.get("openclaw_config")
+                )
                 await _record_evolution(
                     db, instance_id, EvolutionEventType.learned, gene.name,
                     gene_slug=gene.slug, gene_id=gene_id,
@@ -1374,85 +1374,13 @@ async def _send_learning_task(
             await _direct_install(instance.id, gene.id, ig.id)
 
 
-async def _write_skill_file(
-    fs: RemoteFS,
-    skill_name: str,
-    content: str,
-    description: str = "",
-) -> None:
-    """Write SKILL.md with YAML front matter required by OpenClaw."""
-    if not content.lstrip().startswith("---"):
-        desc = description or f"Skill: {skill_name}"
-        front_matter = f"---\nname: {skill_name}\ndescription: {desc}\n---\n\n"
-        content = front_matter + content
-
-    await fs.mkdir(f"{SKILLS_DIR_REL}/{skill_name}")
-    await fs.write_text(f"{SKILLS_DIR_REL}/{skill_name}/SKILL.md", content)
-
-
-async def _merge_openclaw_config(fs: RemoteFS, patch: dict) -> None:
-    raw = await fs.read_text(OPENCLAW_CONFIG_REL)
-    existing: dict = {}
-    if raw is not None:
-        try:
-            existing = json.loads(raw)
-        except json.JSONDecodeError:
-            existing = {}
-
-    for key, val in patch.items():
-        if isinstance(val, dict) and isinstance(existing.get(key), dict):
-            existing[key].update(val)
-        else:
-            existing[key] = val
-
-    await fs.write_text(
-        OPENCLAW_CONFIG_REL,
-        json.dumps(existing, indent=2, ensure_ascii=False),
-    )
-
-
-async def _append_tool_allow(fs: RemoteFS, tool_names: list[str]) -> None:
-    """Deduplicate-append tool names to openclaw.json tools.allow array."""
-    raw = await fs.read_text(OPENCLAW_CONFIG_REL)
-    existing: dict = {}
-    if raw is not None:
-        try:
-            existing = json.loads(raw)
-        except json.JSONDecodeError:
-            existing = {}
-
-    tools = existing.setdefault("tools", {})
-    allow = tools.get("allow", [])
-    if not isinstance(allow, list):
-        allow = []
-    existing_set = set(allow)
-    for name in tool_names:
-        if name not in existing_set:
-            allow.append(name)
-            existing_set.add(name)
-    tools["allow"] = allow
-
-    await fs.write_text(OPENCLAW_CONFIG_REL, json.dumps(existing, indent=2, ensure_ascii=False))
-
-
-async def _apply_engineering_actions(fs: RemoteFS, manifest: dict) -> None:
-    """Execute all engineering actions from a gene manifest (legacy, OpenClaw-specific)."""
-    openclaw_config = manifest.get("openclaw_config")
-    if openclaw_config:
-        await _merge_openclaw_config(fs, openclaw_config)
-
-    tool_allow = manifest.get("tool_allow")
-    if tool_allow and isinstance(tool_allow, list):
-        await _append_tool_allow(fs, tool_allow)
-
-
-async def _apply_engineering_actions_via_adapter(
+async def _apply_manifest_actions(
     fs: RemoteFS, manifest: dict, adapter: GeneInstallAdapter,
 ) -> None:
     """Execute engineering actions using the runtime-specific adapter."""
-    openclaw_config = manifest.get("openclaw_config")
-    if openclaw_config:
-        await adapter.apply_config(fs, openclaw_config)
+    runtime_config = manifest.get("runtime_config") or manifest.get("openclaw_config")
+    if runtime_config:
+        await adapter.apply_config(fs, runtime_config)
 
     tool_allow = manifest.get("tool_allow")
     if tool_allow and isinstance(tool_allow, list):
@@ -1486,9 +1414,6 @@ async def _deploy_gene_scripts(
     if scripts_to_deploy:
         await adapter.deploy_scripts(fs, scripts_to_deploy)
 
-
-async def _remove_skill_file(fs: RemoteFS, skill_name: str) -> None:
-    await fs.remove(f"{SKILLS_DIR_REL}/{skill_name}")
 
 
 
@@ -1541,7 +1466,7 @@ async def handle_learning_callback(
         adapter = _get_gene_install_adapter(instance.runtime)
         async with remote_fs(instance, db) as fs:
             await adapter.deploy_skill(fs, skill_name, skill.get("content", ""), gene_desc)
-            await _apply_engineering_actions_via_adapter(fs, manifest, adapter)
+            await _apply_manifest_actions(fs, manifest, adapter)
             await adapter.invalidate_cache(fs, skill_name, "installed")
 
         ig_obj.status = InstanceGeneStatus.installed
@@ -1554,7 +1479,7 @@ async def handle_learning_callback(
         async with remote_fs(instance, db) as fs:
             await adapter.deploy_skill(fs, gene_obj.slug, content, gene_desc)
             manifest = _json_loads(gene_obj.manifest) or {}
-            await _apply_engineering_actions_via_adapter(fs, manifest, adapter)
+            await _apply_manifest_actions(fs, manifest, adapter)
             await adapter.invalidate_cache(fs, gene_obj.slug, "installed")
 
         ig_obj.status = InstanceGeneStatus.installed
@@ -2078,7 +2003,7 @@ async def _push_created_gene_to_registry(
         "tags": meta.get("suggested_tags", []),
         "icon": meta.get("icon"),
         "author": {"type": "agent", "name": "nodeskclaw"},
-        "compatibility": [{"product": "openclaw", "min_version": "1.0.0"}],
+        "compatibility": [{"product": instance.runtime if instance else "openclaw", "min_version": "1.0.0"}],
         **manifest,
     }
     aggregator = get_aggregator()
