@@ -1067,7 +1067,13 @@ async def list_collaboration_timeline(
     """List all collaboration messages in a workspace as a timeline."""
     await wm_service.check_workspace_member(workspace_id, user, db)
     from datetime import datetime as dt
-    since_dt = dt.fromisoformat(since) if since else None
+    if since:
+        try:
+            since_dt = dt.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="since 参数格式无效，请使用 ISO 8601 格式")
+    else:
+        since_dt = None
     messages = await msg_service.get_collaboration_timeline(
         db, workspace_id, limit, since_dt,
     )

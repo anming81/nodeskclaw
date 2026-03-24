@@ -198,7 +198,10 @@ async def _apply_template_to_workspace(
 
     if "content" in bb_snap:
         bb_result = await db.execute(
-            select(Blackboard).where(Blackboard.workspace_id == workspace_id)
+            select(Blackboard).where(
+                Blackboard.workspace_id == workspace_id,
+                not_deleted(Blackboard),
+            )
         )
         bb_row = bb_result.scalar_one_or_none()
         if bb_row:
@@ -764,7 +767,10 @@ def _obj_to_info(o: WorkspaceObjective, children: list[ObjectiveInfo] | None = N
 
 async def get_blackboard(db: AsyncSession, workspace_id: str) -> BlackboardInfo | None:
     result = await db.execute(
-        select(Blackboard).where(Blackboard.workspace_id == workspace_id)
+        select(Blackboard).where(
+            Blackboard.workspace_id == workspace_id,
+            Blackboard.deleted_at.is_(None),
+        )
     )
     bb = result.scalar_one_or_none()
     if bb is None:
@@ -805,7 +811,10 @@ async def get_blackboard(db: AsyncSession, workspace_id: str) -> BlackboardInfo 
 
 async def update_blackboard(db: AsyncSession, workspace_id: str, data: BlackboardUpdate) -> BlackboardInfo | None:
     result = await db.execute(
-        select(Blackboard).where(Blackboard.workspace_id == workspace_id)
+        select(Blackboard).where(
+            Blackboard.workspace_id == workspace_id,
+            Blackboard.deleted_at.is_(None),
+        )
     )
     bb = result.scalar_one_or_none()
     if bb is None:
@@ -844,7 +853,10 @@ async def patch_blackboard_section(
     db: AsyncSession, workspace_id: str, data: BlackboardSectionPatch,
 ) -> BlackboardInfo | None:
     result = await db.execute(
-        select(Blackboard).where(Blackboard.workspace_id == workspace_id)
+        select(Blackboard).where(
+            Blackboard.workspace_id == workspace_id,
+            Blackboard.deleted_at.is_(None),
+        )
     )
     bb = result.scalar_one_or_none()
     if bb is None:
