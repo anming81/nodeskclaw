@@ -10,6 +10,7 @@ import { resolveApiErrorMessage } from '@/i18n/error'
 import { useAuthStore } from '@/stores/auth'
 import { useOrgStore } from '@/stores/org'
 import { useI18n } from 'vue-i18n'
+import { useEdition } from '@/composables/useFeature'
 import { getRuntimeCaps } from '@/utils/runtimeCapabilities'
 
 const { t } = useI18n()
@@ -17,6 +18,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const orgStore = useOrgStore()
+const { isEE } = useEdition()
 
 const K8S_NAME_MAX = 63
 const NS_PREFIX_BASE = 'nodeskclaw-'.length + 1
@@ -408,15 +410,15 @@ const canDeploy = computed(() =>
 
 async function handleDeploy() {
   if (!name.value.trim()) {
-    error.value = '请输入AI 员工名称'
+    error.value = t('createInstance.nameRequired')
     return
   }
   if (!selectedImage.value) {
-    error.value = '请选择镜像版本'
+    error.value = t('createInstance.imageRequired')
     return
   }
   if (clusters.value.length === 0) {
-    error.value = '没有可用的集群，请联系管理员'
+    error.value = t('createInstance.noClusterError')
     return
   }
 
@@ -489,9 +491,30 @@ async function handleDeploy() {
         <ArrowLeft class="w-5 h-5" />
       </button>
       <div>
-        <h1 class="text-xl font-bold">创建AI 员工</h1>
-        <p class="text-sm text-muted-foreground mt-0.5">只需几步即可部署你的 AI 员工</p>
+        <h1 class="text-xl font-bold">{{ t('createInstance.pageTitle') }}</h1>
+        <p class="text-sm text-muted-foreground mt-0.5">{{ t('createInstance.pageSubtitle') }}</p>
       </div>
+    </div>
+
+    <!-- 无集群警告 -->
+    <div
+      v-if="!loadingInit && clusters.length === 0"
+      class="flex items-center gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5 mb-6"
+    >
+      <AlertCircle class="w-5 h-5 text-amber-500 shrink-0" />
+      <div class="flex-1 text-sm">
+        <span class="font-medium">{{ t('createInstance.noClusterTitle') }}</span>
+        <span class="text-muted-foreground ml-1">
+          {{ isEE ? t('createInstance.noClusterDescEE') : t('createInstance.noClusterDesc') }}
+        </span>
+      </div>
+      <button
+        v-if="!isEE"
+        class="shrink-0 px-3 py-1.5 rounded-md bg-amber-500/10 text-amber-500 text-xs font-medium hover:bg-amber-500/20 transition-colors"
+        @click="router.push('/org-settings/clusters')"
+      >
+        {{ t('createInstance.goSetupCluster') }}
+      </button>
     </div>
 
     <!-- 步骤指示器 -->
@@ -799,7 +822,7 @@ async function handleDeploy() {
           >
             <Loader2 v-if="deploying" class="w-4 h-4 animate-spin" />
             <Rocket v-else class="w-4 h-4" />
-            {{ deploying ? '部署中...' : '创建AI 员工' }}
+            {{ deploying ? t('createInstance.deploying') : t('createInstance.deployButton') }}
           </button>
         </div>
       </div>
