@@ -2,13 +2,13 @@
 
 ## 状态
 
-**这些模板已迁移到 GeneHub Registry，不再作为启动时 seed 数据使用。**
+**配置 `SEED_GENES=true`（默认）时，后端启动自动从本地模板导入种子基因到数据库。**
 
-- 上传脚本：`scripts/upload_seeds_to_genehub.py`
-- 迁移时间：2026-03-06
-- 原 seed 机制（`main.py` 迁移 27 / 33）已移除
+- 幂等：slug 已存在则跳过，不覆盖已有数据
+- 关闭：设置 `SEED_GENES=false` 后重启即可跳过导入
+- GeneHub 同步脚本：`scripts/upload_seeds_to_genehub.py`
 
-本目录保留 JSON 文件作为参考备份。如需修改基因内容，请直接在 GeneHub 上操作。
+本目录 JSON 文件同时作为本地 seed 数据源和 GeneHub 上传的参考模板。
 
 ## 目录结构
 

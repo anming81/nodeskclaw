@@ -113,6 +113,9 @@ class Settings(BaseSettings):
     EGRESS_DENY_CIDRS: str = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     EGRESS_ALLOW_PORTS: str = "80,443"
 
+    # ── Gene Seed ───────────────────────────────────────
+    SEED_GENES: bool = True
+
     # ── Skill Registries ─────────────────────────────────
     # JSON array of registry configs:
     # [{"type":"genehub","id":"deskhub","url":"https://skills.deskclaw.me","api_key":"","name":"DeskHub"},
@@ -120,9 +123,9 @@ class Settings(BaseSettings):
     SKILL_REGISTRIES: str = ""
 
     # Legacy — non-empty value auto-registers as type=genehub, id=genehub adapter
-    GENEHUB_REGISTRY_URL: str = ""
+    GENEHUB_REGISTRY_URL: str = "https://skills.deskclaw.me"
     GENEHUB_API_KEY: str = ""
-    GENEHUB_WEB_URL: str = ""
+    GENEHUB_WEB_URL: str = "https://skills.deskclaw.me"
 
     # ── TOS 对象存储 ─────────────────────────────────────
     TOS_ENDPOINT: str = ""

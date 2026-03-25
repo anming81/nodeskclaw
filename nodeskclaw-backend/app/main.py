@@ -294,6 +294,92 @@ async def lifespan(app: FastAPI):
     except Exception as _sr_err:
         logger.warning("source_registry 回填跳过（列可能尚未创建）: %s", _sr_err)
 
+    # ── 种子基因导入（幂等，配置驱动）──
+    if settings.SEED_GENES:
+        try:
+            async with async_session_factory() as _seed_db:
+                import pathlib
+                import json as _seed_json
+                from app.models.gene import Gene as _SeedGene, Genome as _SeedGenome
+                from app.models.base import not_deleted as _seed_not_deleted
+
+                _seed_dir = pathlib.Path(__file__).parent / "data" / "gene_templates"
+
+                _gene_files = [
+                    "mcp_blackboard_tools.json",
+                    "mcp_proposals.json",
+                    "mcp_gene_discovery.json",
+                    "mcp_performance_reader.json",
+                    "mcp_topology_awareness.json",
+                    "mcp_shared_files.json",
+                    "meta_gene_ai_hc.json",
+                    "meta_gene_reorg.json",
+                    "meta_gene_culture.json",
+                    "meta_gene_self_improve.json",
+                    "meta_gene_innovation.json",
+                    "meta_gene_akr_decomposer.json",
+                ]
+                _genome_files = [
+                    "genome_self_management.json",
+                    "genome_ai_employee_basics.json",
+                    "workflow_genome_example.json",
+                ]
+
+                _seeded_genes = 0
+                for _fname in _gene_files:
+                    _tpl_path = _seed_dir / _fname
+                    if not _tpl_path.exists():
+                        continue
+                    _tpl = _seed_json.loads(_tpl_path.read_text())
+                    _slug = _tpl["slug"]
+                    _existing = (await _seed_db.execute(
+                        select(_SeedGene).where(_SeedGene.slug == _slug, _seed_not_deleted(_SeedGene))
+                    )).scalar_one_or_none()
+                    if _existing is None:
+                        _seed_db.add(_SeedGene(
+                            name=_tpl["name"],
+                            slug=_slug,
+                            description=_tpl.get("description"),
+                            category=_tpl.get("category"),
+                            tags=_seed_json.dumps(_tpl.get("tags", []), ensure_ascii=False),
+                            source="official",
+                            version="1.0.0",
+                            manifest=_seed_json.dumps(_tpl.get("manifest", {}), ensure_ascii=False),
+                            is_published=True,
+                            review_status="approved",
+                            source_registry="local",
+                        ))
+                        _seeded_genes += 1
+
+                _seeded_genomes = 0
+                for _fname in _genome_files:
+                    _tpl_path = _seed_dir / _fname
+                    if not _tpl_path.exists():
+                        continue
+                    _tpl = _seed_json.loads(_tpl_path.read_text())
+                    _slug = _tpl["slug"]
+                    _existing = (await _seed_db.execute(
+                        select(_SeedGenome).where(_SeedGenome.slug == _slug, _seed_not_deleted(_SeedGenome))
+                    )).scalar_one_or_none()
+                    if _existing is None:
+                        _seed_db.add(_SeedGenome(
+                            name=_tpl["name"],
+                            slug=_slug,
+                            description=_tpl.get("description"),
+                            gene_slugs=_seed_json.dumps(_tpl.get("gene_slugs", []), ensure_ascii=False),
+                            config_override=_seed_json.dumps(_tpl.get("config_override", {}), ensure_ascii=False),
+                            is_published=True,
+                        ))
+                        _seeded_genomes += 1
+
+                if _seeded_genes or _seeded_genomes:
+                    await _seed_db.commit()
+                    logger.info("种子基因导入完成: %d gene + %d genome", _seeded_genes, _seeded_genomes)
+                else:
+                    logger.info("种子基因检查完成，无需导入（均已存在）")
+        except Exception as _seed_err:
+            logger.warning("种子基因导入失败: %s", _seed_err)
+
     # 预热 K8s 连接池：从 DB 加载所有已连接集群
     async with async_session_factory() as db:
         result = await db.execute(
