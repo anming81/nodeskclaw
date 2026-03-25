@@ -270,7 +270,7 @@ cmd_deploy() {
     targets=("$TARGET")
   fi
 
-  log "镜像标签: $TAG"
+  log "镜像标签: ${TAG}"
   log "目标组件: ${targets[*]}"
   log "Namespace: $NAMESPACE"
   [[ -n "$KUBE_CONTEXT" ]] && log "K8s 上下文: $KUBE_CONTEXT"
@@ -295,7 +295,7 @@ cmd_deploy() {
   done
 
   echo ""
-  ok "全部完成（标签: $TAG${NAMESPACE:+, Namespace: $NAMESPACE}）"
+  ok "全部完成（标签: ${TAG}${NAMESPACE:+, Namespace: ${NAMESPACE}}）"
 }
 
 # ── cmd: release ─────────────────────────────────────────
@@ -355,7 +355,7 @@ cmd_release() {
 
   confirm "即将构建镜像（${targets[*]}）、创建 git tag ${VERSION} 并发布 GitHub Pre-release"
 
-  log "构建并推送镜像（标签: $TAG）..."
+  log "构建并推送镜像（标签: ${TAG}）..."
   for t in "${targets[@]}"; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     if ! build_and_push "$t"; then
