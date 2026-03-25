@@ -27,7 +27,7 @@ async def run_seed(
     return {"ce_admin": ce_creds, "ee_admin": ee_creds}
 
 
-_DEFAULT_REGISTRY_CONFIGS: dict[str, str] = {
+DEFAULT_REGISTRY_CONFIGS: dict[str, str] = {
     "image_registry": "nodesk-center-cn-beijing.cr.volces.com/public/deskclaw-openclaw",
     "image_registry_zeroclaw": "nodesk-center-cn-beijing.cr.volces.com/public/deskclaw-zeroclaw",
     "image_registry_nanobot": "nodesk-center-cn-beijing.cr.volces.com/public/deskclaw-nanobot",
@@ -46,7 +46,7 @@ async def _seed_default_registry_configs(
 
     async with session_factory() as db:
         seeded = 0
-        for key, default_value in _DEFAULT_REGISTRY_CONFIGS.items():
+        for key, default_value in DEFAULT_REGISTRY_CONFIGS.items():
             row = (await db.execute(
                 select(SystemConfig).where(
                     SystemConfig.key == key,
