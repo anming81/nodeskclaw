@@ -35,6 +35,16 @@ NoDeskClaw/
 ./dev.sh ee      # 强制 EE 模式（backend + portal + admin）
 ```
 
+### Docker Compose 部署
+
+```bash
+cp .env.example nodeskclaw-backend/.env  # 配置后端环境变量
+docker compose up -d                     # CE 模式（默认）
+docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d  # EE 模式
+```
+
+Docker Compose 部署自动配置 Docker socket 挂载和数据目录映射，支持创建 Docker 类型集群。`DOCKER_DATA_DIR` 默认为 `$HOME/.nodeskclaw/docker-instances`，`NODESKCLAW_EDITION` 由 compose 文件自动设置。
+
 ### 后端（Python）
 
 ```bash

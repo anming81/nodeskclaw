@@ -454,6 +454,15 @@ Docker Compose 部署注意事项：
 - `CORS_ORIGINS` 需根据实际访问端口调整（Docker 默认 Portal 端口 80，Admin 端口 8001）
 - 如需使用外部数据库，在项目根目录 `.env` 设置 `DATABASE_URL`，然后 `docker compose up -d nodeskclaw-backend portal`
 
+#### Docker 集群支持
+
+Docker Compose 部署默认支持创建 Docker 类型集群（后端镜像内置 Docker CLI）。关键配置：
+
+- **Docker socket 挂载**：`docker-compose.yml` 已配置 `/var/run/docker.sock` 挂载，后端容器通过宿主机 Docker daemon 管理 AI 实例容器
+- **数据目录映射**：`DOCKER_DATA_DIR` 环境变量指定实例数据目录，默认为 `$HOME/.nodeskclaw/docker-instances`（宿主机路径）。容器内外使用同一路径，确保生成的 compose volume 映射正确
+- **自定义数据目录**：如需修改，在 `.env` 中设置 `DOCKER_DATA_DIR=/your/path`，并同步修改 `docker-compose.yml` 中的 volumes 映射为 `$DOCKER_DATA_DIR:$DOCKER_DATA_DIR`
+- **CE/EE 模式**：`docker-compose.yml` 默认设置 `NODESKCLAW_EDITION=ce`；EE 部署使用 `docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d`
+
 ### Docker 构建（单独构建镜像）
 
 后端镜像的 build context 是**项目根目录**（非 `nodeskclaw-backend/`），因为镜像需要包含 `openclaw-channel-nodeskclaw/`、`openclaw-channel-dingtalk/` 等插件源码。
