@@ -226,6 +226,59 @@ On first startup the backend prints the initial admin credentials directly in th
 
 Open `http://localhost:4517` (Portal) or `http://localhost:4518` (Admin, EE) and sign in with the printed credentials. You will be prompted to change the password on first login.
 
+## Upgrade
+
+### Docker Compose
+
+All business services are built locally, so upgrading means pulling the latest code and rebuilding.
+
+```bash
+# 1. Back up the database
+docker compose exec postgres pg_dump -U nodeskclaw nodeskclaw > backup_$(date +%Y%m%d).sql
+
+# 2. Pull the target version
+git pull origin main          # latest
+# git checkout v0.9.0         # or a specific release tag
+
+# 3. Rebuild and restart
+docker compose build
+docker compose up -d
+
+# EE
+docker compose -f docker-compose.yml -f docker-compose.ee.yml build
+docker compose -f docker-compose.yml -f docker-compose.ee.yml up -d
+```
+
+Database migrations run automatically on backend startup (Alembic `upgrade head`). Verify with:
+
+```bash
+docker compose logs nodeskclaw-backend | grep -i "alembic\|migration\|upgrade"
+```
+
+### Kubernetes (via deploy/cli.sh)
+
+K8s deployments are managed by `deploy/cli.sh`. The typical workflow is **deploy to staging first, then promote to production**.
+
+**Staging** -- build images, push to registry, and rolling-update the staging namespace:
+
+```bash
+./deploy/cli.sh deploy --tag v0.9.0
+```
+
+**Production** -- reuse the already-pushed images and update the production namespace (no rebuild):
+
+```bash
+./deploy/cli.sh promote v0.9.0
+```
+
+Database migrations run automatically when the new backend pod starts. See [deploy/README.md](deploy/README.md) for full CLI usage and options.
+
+### Upgrade Notes
+
+- **Back up your database** before any major version upgrade.
+- Check [GitHub Releases](https://github.com/patchwork-body/nodeskclaw/releases) for release notes and breaking changes.
+- If your database was not previously managed by Alembic, you may need to run `alembic stamp head` once before upgrading. See [Backend README](nodeskclaw-backend/README.md) for details.
+
 ## Documentation
 
 | | |
