@@ -13,6 +13,9 @@ const hasEE = fs.existsSync(eePortalDir)
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || 'dev'),
+  },
   resolve: {
     alias: [
       ...(hasEE

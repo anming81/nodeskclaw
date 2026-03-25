@@ -171,6 +171,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 COPY --from=ee frontend/portal/ /ee/frontend/portal/
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=\$VITE_APP_VERSION
 RUN npm run build
 
 FROM nginx:1.27-alpine
@@ -188,6 +190,12 @@ EODF
     warn "[$component] ee/ 目录不存在（CE 版本），跳过 admin 构建"
     return 0
   fi
+
+  case "$component" in
+    portal|admin)
+      extra_args="$extra_args --build-arg VITE_APP_VERSION=${TAG}"
+      ;;
+  esac
 
   log "[$component] 构建镜像: $image"
   if ! docker build --platform linux/amd64 \
