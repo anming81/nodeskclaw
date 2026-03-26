@@ -147,7 +147,10 @@ class ApprovalChannelPlugin:
             try:
                 async with async_session_factory() as db:
                     result = await db.execute(
-                        select(DecisionRecord).where(DecisionRecord.id == record_id)
+                        select(DecisionRecord).where(
+                            DecisionRecord.id == record_id,
+                            DecisionRecord.deleted_at.is_(None),
+                        )
                     )
                     record = result.scalar_one_or_none()
                     if record and record.outcome != "pending":
