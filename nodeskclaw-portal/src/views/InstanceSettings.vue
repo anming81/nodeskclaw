@@ -623,35 +623,36 @@ watch(() => instanceId.value, (val) => {
             </button>
           </div>
 
-          <!-- Custom Provider form -->
-          <div v-if="showCustomForm" class="rounded-lg border border-violet-400/30 bg-violet-500/5 p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="font-medium text-sm text-violet-400">{{ t('llm.customProvider') }}</span>
-              <button class="text-muted-foreground hover:text-foreground text-xs" @click="showCustomForm = false; customSlug = ''; customSlugError = ''">
-                {{ t('common.cancel') }}
-              </button>
-            </div>
-            <div class="space-y-1.5">
-              <label class="text-xs text-muted-foreground">{{ t('llm.providerSlug') }}</label>
-              <input
-                v-model="customSlug"
-                type="text"
-                maxlength="32"
-                :placeholder="t('llm.providerSlugPlaceholder')"
-                class="w-full px-3 py-1.5 rounded-md bg-background border border-border text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
-                @keydown.enter="addCustomProvider"
-              />
-              <p v-if="customSlugError" class="text-[10px] text-destructive">{{ customSlugError }}</p>
-              <p v-else class="text-[10px] text-muted-foreground">{{ t('llm.providerSlugHint') }}</p>
-            </div>
-            <button
-              class="px-4 py-1.5 rounded-md bg-violet-500/10 text-violet-400 text-sm hover:bg-violet-500/20 transition-colors"
-              :disabled="!customSlug.trim()"
-              @click="addCustomProvider"
-            >
-              {{ t('common.add') }}
+        </div>
+
+        <!-- Custom Provider form -->
+        <div v-if="showCustomForm" class="rounded-lg border border-violet-400/30 bg-violet-500/5 p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-sm text-violet-400">{{ t('llm.customProvider') }}</span>
+            <button class="text-muted-foreground hover:text-foreground text-xs" @click="showCustomForm = false; customSlug = ''; customSlugError = ''">
+              {{ t('common.cancel') }}
             </button>
           </div>
+          <div class="space-y-1.5">
+            <label class="text-xs text-muted-foreground">{{ t('llm.providerSlug') }}</label>
+            <input
+              v-model="customSlug"
+              type="text"
+              maxlength="32"
+              :placeholder="t('llm.providerSlugPlaceholder')"
+              class="w-full px-3 py-1.5 rounded-md bg-background border border-border text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary/50"
+              @keydown.enter="addCustomProvider"
+            />
+            <p v-if="customSlugError" class="text-[10px] text-destructive">{{ customSlugError }}</p>
+            <p v-else class="text-[10px] text-muted-foreground">{{ t('llm.providerSlugHint') }}</p>
+          </div>
+          <button
+            class="px-4 py-1.5 rounded-md bg-violet-500/10 text-violet-400 text-sm hover:bg-violet-500/20 transition-colors"
+            :disabled="!customSlug.trim()"
+            @click="addCustomProvider"
+          >
+            {{ t('common.add') }}
+          </button>
         </div>
 
       </template>
