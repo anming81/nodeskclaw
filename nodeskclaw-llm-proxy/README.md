@@ -57,6 +57,8 @@ uv run uvicorn app.main:app --port 8080 --reload
 
 如果通过 Docker/容器运行，并且需要使用 `codex` Provider，还需要把宿主机的 `~/.codex` 挂载到容器内，并设置 `CODEX_HOME`。本仓库的 `docker-compose.yml` 已经包含这项挂载。
 
+默认情况下，`CODEX_BYPASS_APPROVALS_AND_SANDBOX=false`，不会绕过 Codex CLI 自带的审批和沙箱保护。如果你确实需要无审批执行，必须显式改为 `true`，并自行承担对应的执行风险。
+
 ## 构建部署
 
 ### 使用统一 CLI（推荐）
