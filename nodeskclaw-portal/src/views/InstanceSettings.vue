@@ -133,8 +133,10 @@ async function loadAll() {
       personalKeys.value = keysResult.value.data.data ?? []
     }
 
-    const podConfigs: { provider: string; key_source: string; selected_models?: any[]; personal_key_masked?: string }[] =
-      configsResult.status === 'fulfilled' ? (configsResult.value.data.data ?? []) : []
+    const podConfigs: {
+      provider: string; key_source: string; selected_models?: any[];
+      personal_key_masked?: string; base_url?: string | null; api_type?: string | null;
+    }[] = configsResult.status === 'fulfilled' ? (configsResult.value.data.data ?? []) : []
 
     const configs: ProviderConfig[] = []
     for (const c of podConfigs) {
@@ -146,10 +148,10 @@ async function loadAll() {
         personalKeyNew: '',
         personalKeyMasked: pk?.api_key_masked ?? c.personal_key_masked ?? '',
         hasExistingPersonalKey: !!pk,
-        baseUrl: pk?.base_url ?? '',
-        apiType: pk?.api_type ?? (isCustom ? 'openai-completions' : ''),
+        baseUrl: c.base_url ?? pk?.base_url ?? '',
+        apiType: c.api_type ?? pk?.api_type ?? (isCustom ? 'openai-completions' : ''),
         isCustom,
-        showBaseUrl: !!pk?.base_url,
+        showBaseUrl: isCustom || !!(c.base_url || pk?.base_url),
         selectedModel: (c.selected_models ?? [])[0] ?? null,
       })
     }
@@ -314,6 +316,8 @@ async function handleSave() {
         provider: c.provider,
         key_source: c.keySource,
         selected_models: c.selectedModel ? [c.selectedModel] : undefined,
+        base_url: c.baseUrl || null,
+        api_type: c.isCustom ? c.apiType : null,
       })),
     })
 
