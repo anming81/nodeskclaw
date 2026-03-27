@@ -94,6 +94,12 @@ if [ -f "${CONFIG_FILE}" ]; then
   "
 fi
 
+# ---- 1.2. 会话索引修复（兼容旧版会话文件命名） ----
+
+if [ -d "${OPENCLAW_DIR}/agents/main/sessions" ]; then
+  node /repair-sessions-index.js
+fi
+
 # ---- 2. 凭证注入 ----
 
 if [ -n "${OPENCLAW_CREDENTIALS_JSON:-}" ]; then

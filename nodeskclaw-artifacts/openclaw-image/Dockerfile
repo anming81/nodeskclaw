@@ -57,6 +57,7 @@ RUN mkdir -p /root/.openclaw/agents/main/sessions \
 
 # ---------- 配置模板 ----------
 COPY openclaw.json.template /root/.openclaw/openclaw.json.template
+COPY repair-sessions-index.js /repair-sessions-index.js
 
 # ---------- 版本标记 ----------
 RUN echo "${IMAGE_VERSION}" > /root/.openclaw-version
