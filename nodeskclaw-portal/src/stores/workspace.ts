@@ -601,6 +601,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function clearChatHistory(workspaceId: string) {
+    await api.post(`/workspaces/${workspaceId}/messages/clear`)
+    chatMessages.value = []
+    typingAgents.value.clear()
+    unreadCount.value = 0
+  }
+
   const _typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   function _handleAgentTyping(data: Record<string, unknown>) {
@@ -922,6 +929,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             })
           }
         }
+      } catch { /* ignore */ }
+    })
+
+    eventSource.addEventListener('chat:cleared', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data)
+        externalCallback?.('chat:cleared', data)
+        chatMessages.value = []
+        typingAgents.value.clear()
+        unreadCount.value = 0
       } catch { /* ignore */ }
     })
 
@@ -1324,6 +1341,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fetchChatHistory,
     sendWorkspaceMessage,
     sendSystemMessage,
+    clearChatHistory,
     connectSSE,
     disconnectSSE,
     sendMessage,

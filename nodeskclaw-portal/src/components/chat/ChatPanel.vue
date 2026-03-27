@@ -232,17 +232,26 @@ function insertSystemMessage(content: string, persist = true) {
   scrollToBottom()
 }
 
-function executeSlashCommand(name: string, arg?: string) {
+async function executeSlashCommand(name: string, arg?: string) {
   switch (name) {
     case 'status': {
       const lines = agents.value.map(a => `${agentLabel(a)}: ${a.status}`)
       insertSystemMessage(lines.length ? lines.join('\n') : t('chat.noAgentsInWorkspace'))
       break
     }
-    case 'clear':
-      store.chatMessages.splice(0, store.chatMessages.length)
-      insertSystemMessage(t('chat.chatCleared'), false)
+    case 'clear': {
+      if (!store.hasPermission('manage_settings')) {
+        insertSystemMessage(t('chat.clearNotAllowed'))
+        break
+      }
+      try {
+        await store.clearChatHistory(props.workspaceId)
+        insertSystemMessage(t('chat.chatCleared'), false)
+      } catch (e: any) {
+        insertSystemMessage(t('chat.clearFailed', { error: resolveApiErrorMessage(e, e?.message || '') }))
+      }
       break
+    }
     case 'restart':
       if (arg) doRestartAgent(arg)
       else insertSystemMessage(t('chat.restartUsage'))
@@ -331,7 +340,7 @@ async function sendMessage() {
       const mentionedAgent = mentions.length > 0
         ? agents.value.find(a => a.instance_id === mentions[0])
         : undefined
-      executeSlashCommand(cmdName, mentionedAgent ? agentLabel(mentionedAgent) : undefined)
+      void executeSlashCommand(cmdName, mentionedAgent ? agentLabel(mentionedAgent) : undefined)
     }
     return
   }
@@ -340,7 +349,7 @@ async function sendMessage() {
   if (slashMatch) {
     const cmd = slashMatch[1].toLowerCase()
     const arg = text.slice(slashMatch[0].length).trim().replace(/^@/, '')
-    executeSlashCommand(cmd, arg || undefined)
+    void executeSlashCommand(cmd, arg || undefined)
     return
   }
 
@@ -494,7 +503,9 @@ const editor = useEditor({
         command: ({ editor: ed, range, props: p }: any) => {
           if (p.immediate) {
             ed.chain().focus().deleteRange(range).run()
-            nextTick(() => executeSlashCommand(p.id))
+            nextTick(() => {
+              void executeSlashCommand(p.id)
+            })
             return
           }
           if (p.needsAgent) {

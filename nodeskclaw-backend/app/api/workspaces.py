@@ -955,6 +955,68 @@ class SystemMessageRequest(BaseModel):
     content: str
 
 
+@router.post("/{workspace_id}/messages/clear")
+async def clear_workspace_messages(
+    workspace_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(_get_current_user_dep()),
+):
+    await wm_service.check_workspace_access(workspace_id, user, "manage_settings", db)
+
+    cleared_count = await msg_service.clear_workspace_messages(db, workspace_id)
+
+    repaired_instances: list[str] = []
+    restart_failures: list[str] = []
+
+    result = await db.execute(
+        sa_select(Instance)
+        .join(
+            WorkspaceAgent,
+            (WorkspaceAgent.instance_id == Instance.id) & (WorkspaceAgent.deleted_at.is_(None)),
+        )
+        .where(
+            WorkspaceAgent.workspace_id == workspace_id,
+            Instance.deleted_at.is_(None),
+            Instance.runtime == "openclaw",
+        )
+    )
+    instances = list(result.scalars().all())
+
+    if instances:
+        from app.services.llm_config_service import restart_runtime
+        from app.services.nfs_mount import remote_fs
+        from app.services.openclaw_session import clear_main_session
+
+        for instance in instances:
+            try:
+                async with remote_fs(instance, db) as fs:
+                    await clear_main_session(fs)
+                repaired_instances.append(instance.id)
+            except Exception:
+                logger.warning("clear_workspace_messages: failed to clear session for %s", instance.id, exc_info=True)
+                restart_failures.append(instance.id)
+                continue
+
+            try:
+                restart_result = await restart_runtime(instance, db)
+                if restart_result.get("status") != "ok":
+                    restart_failures.append(instance.id)
+            except Exception:
+                logger.warning("clear_workspace_messages: failed to restart runtime for %s", instance.id, exc_info=True)
+                restart_failures.append(instance.id)
+
+    broadcast_event(workspace_id, "chat:cleared", {
+        "cleared_count": cleared_count,
+        "repaired_instances": repaired_instances,
+        "restart_failures": restart_failures,
+    })
+    return _ok({
+        "cleared_count": cleared_count,
+        "repaired_instances": repaired_instances,
+        "restart_failures": restart_failures,
+    })
+
+
 @router.post("/{workspace_id}/system-message")
 async def post_system_message(
     workspace_id: str,

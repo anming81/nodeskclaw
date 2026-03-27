@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.workspace_message import WorkspaceMessage
@@ -108,6 +108,22 @@ async def get_agent_collaboration_messages(
     messages = list(result.scalars().all())
     messages.reverse()
     return messages
+
+
+async def clear_workspace_messages(
+    db: AsyncSession,
+    workspace_id: str,
+) -> int:
+    result = await db.execute(
+        update(WorkspaceMessage)
+        .where(
+            WorkspaceMessage.workspace_id == workspace_id,
+            WorkspaceMessage.deleted_at.is_(None),
+        )
+        .values(deleted_at=func.now())
+    )
+    await db.commit()
+    return result.rowcount or 0
 
 
 def build_context_prompt(
