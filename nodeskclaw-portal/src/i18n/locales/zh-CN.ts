@@ -528,6 +528,8 @@ const zhCN = {
     cmdRemoveLabel: "移除 AI 员工",
     noAgentsInWorkspace: "办公室内没有 AI 员工",
     chatCleared: "聊天记录已清空",
+    clearNotAllowed: "只有办公室管理员可以清空聊天历史",
+    clearFailed: "清空聊天历史失败：{error}",
     restartUsage: "用法: /restart {'@'}AI员工名称",
     removeUsage: "用法: /remove {'@'}AI员工名称",
     unknownCommand: "未知命令: /{command}",

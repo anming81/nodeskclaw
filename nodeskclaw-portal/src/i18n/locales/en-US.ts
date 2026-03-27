@@ -528,6 +528,8 @@ const enUS = {
     cmdRemoveLabel: "Remove AI Employee",
     noAgentsInWorkspace: "No AI Employees in this cyber office",
     chatCleared: "Chat history cleared",
+    clearNotAllowed: "Only workspace administrators can clear chat history",
+    clearFailed: "Failed to clear chat history: {error}",
     restartUsage: "Usage: /restart {'@'}AgentName",
     removeUsage: "Usage: /remove {'@'}AgentName",
     unknownCommand: "Unknown command: /{command}",
