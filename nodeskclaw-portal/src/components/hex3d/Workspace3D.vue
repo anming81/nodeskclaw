@@ -125,17 +125,21 @@ const DISCONNECTED_COLOR = 0x555566
 const SHOW_AGENT_ROBOT = false
 const SHOW_AGENT_PHONE = false
 
+function getAgentBaseColor(agent: AgentBrief): number {
+  return agent.theme_color
+    ? parseInt(agent.theme_color.replace('#', ''), 16)
+    : (STATUS_COLORS_3D[agent.status] ?? 0xa78bfa)
+}
+
 function createHexMesh(agent: AgentBrief): THREE.Group {
   const group = new THREE.Group()
   const { x, y } = axialToWorld(agent.hex_q, agent.hex_r)
   group.position.set(x, 0.04, y)
   group.userData = { hexId: agent.instance_id, isHex: true, sseConnected: agent.sse_connected }
 
-  const baseColor = STATUS_COLORS_3D[agent.status] ?? 0xa78bfa
+  const baseColor = getAgentBaseColor(agent)
   const color = agent.sse_connected ? baseColor : DISCONNECTED_COLOR
-  const bodyTheme = agent.theme_color
-    ? parseInt(agent.theme_color.replace('#', ''), 16)
-    : undefined
+  const bodyTheme = baseColor
 
   const baseMat = new THREE.MeshStandardMaterial({
     color,
@@ -671,7 +675,7 @@ addToLoop(() => {
       } else {
         const agent = props.agents.find(a => a.instance_id === id)
         if (agent) {
-          const baseColor = STATUS_COLORS_3D[agent.status] ?? 0xa78bfa
+          const baseColor = getAgentBaseColor(agent)
           mat.color.set(agent.sse_connected ? baseColor : DISCONNECTED_COLOR)
           mat.emissive.set(agent.sse_connected ? baseColor : DISCONNECTED_COLOR)
           mat.opacity = agent.sse_connected ? 0.9 : 0.5

@@ -163,6 +163,10 @@ const statusColors: Record<string, string> = {
   creating: '#f97316',
 }
 
+function getAgentColor(agent: AgentBrief): string {
+  return agent.theme_color || statusColors[agent.status] || '#a78bfa'
+}
+
 const honeycombGrid = computed(() => {
   const lines: string[] = []
   const r = HEX_SIZE * SCALE * 0.95
@@ -455,8 +459,8 @@ const emptyHexes = computed(() => {
         />
         <polygon
           :points="hexPoints(0, 0)"
-          :fill="agent.sse_connected ? (statusColors[agent.status] || '#a78bfa') + '22' : '#55556622'"
-          :stroke="agent.sse_connected ? (statusColors[agent.status] || '#a78bfa') : '#555566'"
+          :fill="agent.sse_connected ? getAgentColor(agent) + '22' : '#55556622'"
+          :stroke="agent.sse_connected ? getAgentColor(agent) : '#555566'"
           stroke-width="2"
           :stroke-dasharray="agent.sse_connected ? 'none' : '6,4'"
           :opacity="agent.sse_connected ? 1 : 0.6"
@@ -472,7 +476,7 @@ const emptyHexes = computed(() => {
           text-anchor="middle"
           dominant-baseline="middle"
           dy="5"
-          :fill="agent.sse_connected ? (statusColors[agent.status] || '#a78bfa') : '#6b7280'"
+          :fill="agent.sse_connected ? getAgentColor(agent) : '#6b7280'"
           font-size="7"
         >
           {{ agent.sse_connected ? agent.status : 'disconnected' }}
