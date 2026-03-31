@@ -30,7 +30,7 @@ services:
         source: /var/run/docker.sock
         target: /var/run/docker.sock
       - type: bind
-        source: ${NODESKCLAW_DATA_DIR:-$HOME/.nodeskclaw/docker-instances}
+        source: ${NODESKCLAW_DATA_DIR:-${HOME:-.}/.nodeskclaw/docker-instances}
         target: /nodeskclaw-data
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://nodeskclaw:nodeskclaw@postgres:5432/nodeskclaw}
@@ -39,7 +39,7 @@ services:
       LLM_PROXY_INTERNAL_URL: http://llm-proxy:8080
       NODESKCLAW_EDITION: ce
       DOCKER_DATA_DIR: /nodeskclaw-data
-      DOCKER_HOST_DATA_DIR: ${NODESKCLAW_DATA_DIR:-$HOME/.nodeskclaw/docker-instances}
+      DOCKER_HOST_DATA_DIR: ${NODESKCLAW_DATA_DIR:-${HOME:-.}/.nodeskclaw/docker-instances}
       # AI 员工回连后端地址（仅管理 Docker 实例时可保持默认 localhost）
       # 若管理远端 K8s 集群上的 AI 员工，必须改为 K8s Pod 可达的外部地址
       AGENT_API_BASE_URL: ${AGENT_API_BASE_URL:-http://localhost:4510/api/v1}
