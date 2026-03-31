@@ -78,6 +78,8 @@ class _PoolDisconnectFilter(logging.Filter):
     """CancelledError -> single-line WARNING; GC cleanup -> WARNING; real errors untouched."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        if not record.name.startswith("sqlalchemy.pool"):
+            return True
         if record.exc_info and record.exc_info[1]:
             if isinstance(record.exc_info[1], asyncio.CancelledError):
                 record.levelno = logging.WARNING
@@ -95,8 +97,9 @@ class _PoolDisconnectFilter(logging.Filter):
         return True
 
 
-for _pool_logger_name in ("sqlalchemy.pool", "sqlalchemy.pool.impl"):
-    logging.getLogger(_pool_logger_name).addFilter(_PoolDisconnectFilter())
+_pool_filter = _PoolDisconnectFilter()
+_console_handler.addFilter(_pool_filter)
+_file_handler.addFilter(_pool_filter)
 
 import warnings  # noqa: E402
 from sqlalchemy.exc import SAWarning  # noqa: E402
