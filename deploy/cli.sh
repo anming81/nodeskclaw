@@ -7,7 +7,7 @@
 #
 # 命令:
 #   deploy [target]     构建 + 部署（默认 all，默认 staging）
-#   release <version>   打 git tag + 创建 GitHub Pre-release
+#   release <version>   构建 CE 公开镜像 + 打 git tag + 创建 GitHub Pre-release
 #   promote <version>   staging 镜像 -> 生产
 #   init                首次环境初始化
 #
@@ -180,7 +180,7 @@ build_and_push() {
   local dockerfile; dockerfile="$(get_dockerfile "$component")"
   local extra_args=""
 
-  if [[ "$component" != "proxy" && -d "$PROJECT_ROOT/ee" ]]; then
+  if [[ "$CE_ONLY" != true && "$component" != "proxy" && -d "$PROJECT_ROOT/ee" ]]; then
     local ee_df
     ee_df="$(mktemp)"
     case "$component" in
@@ -394,12 +394,14 @@ generate_changelog() {
 cmd_release() {
   require_gh
   REGISTRY="$(echo "$REGISTRY" | sed 's|/[^/]*$|/public|')"
-  log "=== RELEASE: 构建镜像 + 创建 GitHub Release ${VERSION} ==="
+  log "=== RELEASE (CE): 构建镜像 + 创建 GitHub Release ${VERSION} ==="
   log "公开镜像仓库: ${REGISTRY}"
+  log "构建模式: CE（不含 ee/ 代码，不含 admin 组件）"
   echo ""
 
-  local targets
-  read -ra targets <<< "$(get_all_targets)"
+  CE_ONLY=true
+  local targets=(backend portal)
+  [[ "$SKIP_PROXY" != true ]] && targets+=(proxy)
 
   log "生成 changelog..."
   local notes_file; notes_file="$(generate_changelog "$VERSION")"
@@ -571,7 +573,7 @@ usage() {
 
 命令:
   deploy [target]     构建 + 部署（默认 all，默认 staging）
-  release <version>   打 git tag + 创建 GitHub Pre-release
+  release <version>   构建 CE 公开镜像 + 打 git tag + 创建 GitHub Pre-release
   promote <version>   staging 镜像 -> 生产
   init                首次环境初始化
 

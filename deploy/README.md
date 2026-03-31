@@ -81,7 +81,7 @@ KUBE_CONTEXT="<YOUR_KUBECTL_CONTEXT>"
 # 1. 构建并部署到 staging（指定版本标签）
 ./deploy/cli.sh deploy --tag v0.5.0-beta.1
 
-# 2. 测试通过后，打 tag + 创建 GitHub Pre-release
+# 2. 测试通过后，构建 CE 公开镜像 + 打 tag + 创建 GitHub Pre-release（不含 admin 和 ee/ 代码）
 ./deploy/cli.sh release v0.5.0-beta.1
 
 # 3. 将 staging 验证过的镜像推到生产
