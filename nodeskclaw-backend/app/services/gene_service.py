@@ -745,7 +745,10 @@ async def get_featured_genomes(db: AsyncSession, limit: int = 10) -> list[dict]:
 # ═══════════════════════════════════════════════════
 
 
-async def get_instance_genes(db: AsyncSession, instance_id: str) -> list[dict]:
+async def get_instance_genes(db: AsyncSession, instance_id: str, org_id: str | None = None) -> list[dict]:
+    from app.services.instance_service import get_instance
+
+    await get_instance(instance_id, db, org_id)
     q = (
         select(InstanceGene, Gene)
         .join(Gene, InstanceGene.gene_id == Gene.id)
@@ -834,7 +837,7 @@ def _build_db_only_items(ig_rows: list) -> list[dict]:
     return items
 
 
-async def get_instance_skills(db: AsyncSession, instance_id: str) -> list[dict]:
+async def get_instance_skills(db: AsyncSession, instance_id: str, org_id: str | None = None) -> list[dict]:
     """Return the merged skill list driven by Pod filesystem + DB enrichment.
 
     Each item is typed ``hub`` (matched Gene Hub entry) or ``emerged``
@@ -845,7 +848,7 @@ async def get_instance_skills(db: AsyncSession, instance_id: str) -> list[dict]:
     """
     from app.services.instance_service import get_instance
 
-    instance = await get_instance(instance_id, db)
+    instance = await get_instance(instance_id, db, org_id)
 
     ig_result = await db.execute(
         select(InstanceGene, Gene)
@@ -1047,11 +1050,12 @@ async def install_gene(
     instance_id: str,
     gene_slug: str,
     genome_id: str | None = None,
+    org_id: str | None = None,
 ) -> dict:
     from app.api.workspaces import broadcast_event
     from app.services.instance_service import get_instance
 
-    instance = await get_instance(instance_id, db)
+    instance = await get_instance(instance_id, db, org_id)
 
     gene = await get_gene_by_slug(db, gene_slug)
 
@@ -1590,7 +1594,15 @@ async def handle_learning_callback(
 # ── Apply Genome ─────────────────────────────────
 
 
-async def apply_genome(db: AsyncSession, instance_id: str, genome_id: str) -> dict:
+async def apply_genome(
+    db: AsyncSession,
+    instance_id: str,
+    genome_id: str,
+    org_id: str | None = None,
+) -> dict:
+    from app.services.instance_service import get_instance
+
+    await get_instance(instance_id, db, org_id)
     genome_result = await db.execute(
         select(Genome).where(Genome.id == genome_id, not_deleted(Genome))
     )
@@ -1619,7 +1631,7 @@ async def apply_genome(db: AsyncSession, instance_id: str, genome_id: str) -> di
             results["skipped"].append(slug)
             continue
         try:
-            await install_gene(db, instance_id, slug, genome_id=genome.id)
+            await install_gene(db, instance_id, slug, genome_id=genome.id, org_id=org_id)
             results["installed"].append(slug)
         except AppException:
             results["skipped"].append(slug)
@@ -1965,10 +1977,11 @@ async def trigger_gene_creation(
     db: AsyncSession,
     instance_id: str,
     creation_prompt: str | None = None,
+    org_id: str | None = None,
 ) -> dict:
     from app.services.instance_service import get_instance
 
-    instance = await get_instance(instance_id, db)
+    instance = await get_instance(instance_id, db, org_id)
     import uuid
 
     task_id = str(uuid.uuid4())
@@ -2223,10 +2236,15 @@ async def refresh_gene_skills(db: AsyncSession, gene_slugs: list[str]) -> dict:
     return {"refreshed": refreshed, "failed": failed}
 
 
-async def uninstall_gene(db: AsyncSession, instance_id: str, gene_id: str) -> dict:
+async def uninstall_gene(
+    db: AsyncSession,
+    instance_id: str,
+    gene_id: str,
+    org_id: str | None = None,
+) -> dict:
     from app.services.instance_service import get_instance
 
-    await get_instance(instance_id, db)
+    await get_instance(instance_id, db, org_id)
 
     ig_result = await db.execute(
         select(InstanceGene).where(
@@ -2478,7 +2496,11 @@ async def get_evolution_log(
     instance_id: str,
     page: int = 1,
     page_size: int = 20,
+    org_id: str | None = None,
 ) -> list[dict]:
+    from app.services.instance_service import get_instance
+
+    await get_instance(instance_id, db, org_id)
     offset = (page - 1) * page_size
     result = await db.execute(
         select(EvolutionEvent)
