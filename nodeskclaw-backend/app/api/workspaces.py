@@ -407,7 +407,6 @@ async def archive_task(
     task = await workspace_service.archive_task(db, workspace_id, task_id)
     if task is None:
         raise _error(404, 40434, "errors.workspace.task_not_found", "任务不存在")
-    broadcast_event(workspace_id, "task:archived", task.model_dump(mode="json"))
     return _ok(task.model_dump(mode="json"))
 
 

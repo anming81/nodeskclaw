@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { Archive, AlertCircle, Clock, CheckCircle2, Play, Plus, Loader2, DollarSign } from 'lucide-vue-next'
+import { ref, computed, onMounted } from 'vue'
+import { AlertCircle, Clock, CheckCircle2, Play, Loader2, DollarSign } from 'lucide-vue-next'
 import { useWorkspaceStore, type TaskInfo } from '@/stores/workspace'
 import { useI18n } from 'vue-i18n'
 
@@ -13,7 +13,8 @@ const store = useWorkspaceStore()
 
 const tasks = ref<TaskInfo[]>([])
 const loading = ref(false)
-const showArchived = ref(false)
+const showAllCompleted = ref(false)
+const completedPreviewSize = 5
 
 const columns = computed(() => [
   { key: 'pending', label: t('blackboard.taskPending'), icon: Clock, color: 'text-yellow-500' },
@@ -22,26 +23,41 @@ const columns = computed(() => [
   { key: 'blocked', label: t('blackboard.taskBlocked'), icon: AlertCircle, color: 'text-red-500' },
 ])
 
+function toTimestamp(value: string | null | undefined) {
+  if (!value) return 0
+  const ts = Date.parse(value)
+  return Number.isNaN(ts) ? 0 : ts
+}
+
 function tasksByStatus(status: string) {
-  return tasks.value.filter(t => t.status === status)
+  const filtered = tasks.value.filter(t => t.status === status)
+  if (status !== 'done') return filtered
+  const sorted = [...filtered].sort((a, b) =>
+    toTimestamp(b.completed_at || b.updated_at) - toTimestamp(a.completed_at || a.updated_at),
+  )
+  return showAllCompleted.value ? sorted : sorted.slice(0, completedPreviewSize)
+}
+
+function totalTasksByStatus(status: string) {
+  return tasks.value.filter(t => t.status === status).length
 }
 
 async function loadTasks() {
   loading.value = true
   try {
-    tasks.value = await store.fetchTasks(props.workspaceId, undefined, !showArchived.value)
+    tasks.value = await store.fetchTasks(props.workspaceId)
   } finally {
     loading.value = false
   }
 }
 
+const totalCompletedTasks = computed(() => tasks.value.filter(task => task.status === 'done').length)
+const hiddenCompletedCount = computed(() =>
+  Math.max(0, totalCompletedTasks.value - completedPreviewSize),
+)
+
 const editingValueTaskId = ref<string | null>(null)
 const valueInput = ref<number | null>(null)
-
-async function onArchive(taskId: string) {
-  await store.archiveTask(props.workspaceId, taskId)
-  await loadTasks()
-}
 
 function startValueEdit(task: TaskInfo) {
   editingValueTaskId.value = task.id
@@ -67,7 +83,6 @@ function priorityBadgeClass(priority: string) {
 }
 
 onMounted(loadTasks)
-watch(showArchived, loadTasks)
 
 defineExpose({ refresh: loadTasks })
 </script>
@@ -76,23 +91,6 @@ defineExpose({ refresh: loadTasks })
   <div class="space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="text-sm font-medium text-muted-foreground">{{ t('blackboard.tasks') }}</h3>
-      <button
-        role="switch"
-        :aria-checked="showArchived"
-        class="flex items-center gap-2 text-xs text-muted-foreground"
-        @click="showArchived = !showArchived"
-      >
-        <span>{{ t('blackboard.showArchived') }}</span>
-        <span
-          class="relative inline-flex h-4 w-7 shrink-0 rounded-full border border-border transition-colors"
-          :class="showArchived ? 'bg-primary border-primary' : 'bg-muted'"
-        >
-          <span
-            class="pointer-events-none block h-3 w-3 rounded-full bg-background shadow-sm transition-transform"
-            :class="showArchived ? 'translate-x-3' : 'translate-x-0'"
-          />
-        </span>
-      </button>
     </div>
 
     <div v-if="loading" class="flex justify-center py-8">
@@ -104,7 +102,7 @@ defineExpose({ refresh: loadTasks })
         <div class="flex items-center gap-1.5 mb-2">
           <component :is="col.icon" class="w-3.5 h-3.5" :class="col.color" />
           <span class="text-xs font-medium">{{ col.label }}</span>
-          <span class="text-xs text-muted-foreground">({{ tasksByStatus(col.key).length }})</span>
+          <span class="text-xs text-muted-foreground">({{ totalTasksByStatus(col.key) }})</span>
         </div>
 
         <div
@@ -160,16 +158,18 @@ defineExpose({ refresh: loadTasks })
               <DollarSign class="w-3 h-3" />
               {{ t('blackboard.annotateValue') }}
             </button>
-            <button
-              v-if="!task.archived_at"
-              class="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              @click="onArchive(task.id)"
-            >
-              <Archive class="w-3 h-3" />
-              {{ t('blackboard.archive') }}
-            </button>
           </div>
         </div>
+
+        <button
+          v-if="col.key === 'done' && hiddenCompletedCount > 0"
+          class="w-full rounded-lg border border-dashed border-border/60 px-2 py-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          @click="showAllCompleted = !showAllCompleted"
+        >
+          {{ showAllCompleted
+            ? t('blackboard.collapseCompleted')
+            : t('blackboard.showAllCompleted', { count: hiddenCompletedCount }) }}
+        </button>
 
         <div v-if="tasksByStatus(col.key).length === 0" class="text-center text-muted-foreground text-xs py-4">
           {{ t('blackboard.noTasks') }}

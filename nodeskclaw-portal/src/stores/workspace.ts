@@ -415,10 +415,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     blackboard.value = res.data.data
   }
 
-  async function fetchTasks(workspaceId: string, status?: string, excludeArchived = true) {
+  async function fetchTasks(workspaceId: string, status?: string) {
     const params = new URLSearchParams()
     if (status) params.set('status', status)
-    if (!excludeArchived) params.set('exclude_archived', 'false')
     const res = await api.get(`/workspaces/${workspaceId}/blackboard/tasks?${params.toString()}`)
     return (res.data.data || []) as TaskInfo[]
   }
@@ -430,11 +429,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   async function updateTask(workspaceId: string, taskId: string, data: Record<string, unknown>) {
     const res = await api.put(`/workspaces/${workspaceId}/blackboard/tasks/${taskId}`, data)
-    return res.data.data as TaskInfo
-  }
-
-  async function archiveTask(workspaceId: string, taskId: string) {
-    const res = await api.post(`/workspaces/${workspaceId}/blackboard/tasks/${taskId}/archive`)
     return res.data.data as TaskInfo
   }
 
@@ -1363,7 +1357,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fetchTasks,
     createTask,
     updateTask,
-    archiveTask,
     fetchObjectives,
     createObjective,
     updateObjective,
