@@ -198,6 +198,10 @@ def _ensure_gateway_config(config: dict, instance: Instance) -> None:
     if instance.proxy_token:
         gw.setdefault("auth", {})["token"] = instance.proxy_token
 
+    auth = gw.setdefault("auth", {})
+    if "rateLimit" not in auth:
+        auth["rateLimit"] = {"maxAttempts": 10, "windowMs": 60000, "lockoutMs": 300000}
+
     if "trustedProxies" not in gw:
         gw["trustedProxies"] = list(TRUSTED_PROXY_CIDRS)
 
