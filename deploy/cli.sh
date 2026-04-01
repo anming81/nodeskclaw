@@ -54,12 +54,24 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+BLUE='\033[0;34m'
+AMBER='\033[0;33m'
 NC='\033[0m'
 
 log()  { echo -e "${CYAN}[NoDeskClaw]${NC} $*"; }
 ok()   { echo -e "${GREEN}[  OK  ]${NC} $*"; }
 warn() { echo -e "${YELLOW}[ WARN ]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR ]${NC} $*" >&2; }
+
+ctag() {
+  case "$1" in
+    backend) echo -e "${BLUE}backend${NC}" ;;
+    admin)   echo -e "${RED}admin${NC}" ;;
+    portal)  echo -e "${GREEN}portal${NC}" ;;
+    proxy)   echo -e "${AMBER}proxy${NC}" ;;
+    *)       echo "$1" ;;
+  esac
+}
 
 confirm() {
   echo ""
@@ -202,7 +214,7 @@ build_and_push() {
         ;;
       admin)
         if [[ ! -d "$PROJECT_ROOT/ee/nodeskclaw-frontend" ]]; then
-          warn "[$component] ee/nodeskclaw-frontend 不存在，跳过 admin 构建"
+          warn "[$(ctag "$component")] ee/nodeskclaw-frontend 不存在，跳过 admin 构建"
           return 0
         fi
         ;;
@@ -228,9 +240,9 @@ EODF
         extra_args="--build-context ee=$PROJECT_ROOT/ee"
         ;;
     esac
-    log "[$component] 检测到 ee/ 目录，构建 EE 版镜像"
+    log "[$(ctag "$component")] 检测到 ee/ 目录，构建 EE 版镜像"
   elif [[ "$component" == "admin" && ! -d "$PROJECT_ROOT/ee" ]]; then
-    warn "[$component] ee/ 目录不存在（CE 版本），跳过 admin 构建"
+    warn "[$(ctag "$component")] ee/ 目录不存在（CE 版本），跳过 admin 构建"
     return 0
   fi
 
@@ -243,7 +255,7 @@ EODF
       ;;
   esac
 
-  log "[$component] 构建镜像: $image"
+  log "[$(ctag "$component")] 构建镜像: $image"
   if ! docker build --platform linux/amd64 \
     $NO_CACHE \
     $extra_args \
@@ -254,17 +266,17 @@ EODF
     --build-arg HTTPS_PROXY= \
     -t "$image" \
     "$context"; then
-    err "[$component] 镜像构建失败"
+    err "[$(ctag "$component")] 镜像构建失败"
     return 1
   fi
 
-  log "[$component] 推送镜像..."
+  log "[$(ctag "$component")] 推送镜像..."
   if ! docker push "$image"; then
-    err "[$component] 镜像推送失败"
+    err "[$(ctag "$component")] 镜像推送失败"
     return 1
   fi
 
-  ok "[$component] $image"
+  ok "[$(ctag "$component")] $image"
 }
 
 # ── K8s 部署 ─────────────────────────────────────────────
@@ -277,10 +289,10 @@ deploy_to_k8s() {
   local deployment; deployment="$(get_k8s_deployment "$component")"
   local container; container="$(get_k8s_container "$component")"
 
-  log "[$component] 更新 Deployment: $deployment -> $image (context: $KUBE_CONTEXT)"
+  log "[$(ctag "$component")] 更新 Deployment: $deployment -> $image (context: $KUBE_CONTEXT)"
 
   if ! $KUBECTL -n "$NAMESPACE" get deployment "$deployment" &>/dev/null; then
-    warn "[$component] Deployment 不存在，执行首次部署..."
+    warn "[$(ctag "$component")] Deployment 不存在，执行首次部署..."
     if [[ "$component" == "proxy" ]]; then
       local proxy_dir="$PROJECT_ROOT/nodeskclaw-llm-proxy/deploy"
       [[ -f "$proxy_dir/deployment.yaml" ]] && \
@@ -298,13 +310,13 @@ deploy_to_k8s() {
 
   $KUBECTL -n "$NAMESPACE" set image "deployment/$deployment" "$container=$image"
 
-  log "[$component] 等待滚动更新完成..."
+  log "[$(ctag "$component")] 等待滚动更新完成..."
   local timeout=180
   [[ "$component" == "proxy" ]] && timeout=120
   if $KUBECTL -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout="${timeout}s"; then
-    ok "[$component] 部署完成"
+    ok "[$(ctag "$component")] 部署完成"
   else
-    err "[$component] 部署超时，请检查 Pod 状态"
+    err "[$(ctag "$component")] 部署超时，请检查 Pod 状态"
     $KUBECTL -n "$NAMESPACE" get pods -l "app=$deployment"
     return 1
   fi
@@ -341,8 +353,13 @@ cmd_deploy() {
     targets=("$TARGET")
   fi
 
+  local colored_targets=""
+  for _t in "${targets[@]}"; do
+    [[ -n "$colored_targets" ]] && colored_targets+=" "
+    colored_targets+="$(ctag "$_t")"
+  done
   log "镜像标签: ${TAG}"
-  log "目标组件: ${targets[*]}"
+  log "目标组件: ${colored_targets}"
   log "Namespace: $NAMESPACE"
   [[ -n "$KUBE_CONTEXT" ]] && log "K8s 上下文: $KUBE_CONTEXT"
   echo ""
@@ -352,14 +369,14 @@ cmd_deploy() {
 
     if [[ "$DEPLOY_ONLY" != true ]]; then
       if ! build_and_push "$t"; then
-        err "[$t] 构建失败，中止后续组件"
+        err "[$(ctag "$t")] 构建失败，中止后续组件"
         exit 1
       fi
     fi
 
     if [[ "$BUILD_ONLY" != true ]]; then
       if ! deploy_to_k8s "$t"; then
-        err "[$t] 部署失败，中止后续组件"
+        err "[$(ctag "$t")] 部署失败，中止后续组件"
         exit 1
       fi
     fi
@@ -441,7 +458,7 @@ cmd_release() {
   for t in "${targets[@]}"; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     if ! build_and_push "$t"; then
-      err "[$t] 镜像构建失败，中止 release"
+      err "[$(ctag "$t")] 镜像构建失败，中止 release"
       exit 1
     fi
   done
@@ -487,7 +504,7 @@ cmd_promote() {
   for t in "${targets[@]}"; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     if ! deploy_to_k8s "$t"; then
-      err "[$t] 部署失败，中止后续组件"
+      err "[$(ctag "$t")] 部署失败，中止后续组件"
       exit 1
     fi
   done
