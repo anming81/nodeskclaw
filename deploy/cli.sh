@@ -423,7 +423,6 @@ cmd_release() {
   CE_ONLY=""
   local targets=(backend portal)
   [[ "$SKIP_PROXY" != true ]] && targets+=(proxy)
-  [[ "$has_admin" == true ]] && targets+=(admin)
 
   log "生成 changelog..."
   local notes_file; notes_file="$(generate_changelog "$VERSION")"
@@ -436,6 +435,8 @@ cmd_release() {
   [[ "$has_admin" == true ]] && confirm_msg+="，admin → ${REGISTRY}"
   confirm_msg+="）、创建 git tag ${VERSION} 并发布 GitHub Pre-release"
   confirm "$confirm_msg"
+
+  [[ "$has_admin" == true ]] && targets+=(admin)
 
   log "构建并推送镜像（标签: ${TAG}）..."
   for t in "${targets[@]}"; do
