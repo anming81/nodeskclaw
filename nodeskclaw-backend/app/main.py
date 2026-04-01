@@ -223,6 +223,23 @@ async def lifespan(app: FastAPI):
             logger.exception("数据库迁移失败，应用无法启动")
             raise
 
+    # ── Egress 配置迁移：env vars → system_configs（幂等）──
+    from app.models.system_config import SystemConfig
+    from app.services import config_service
+
+    _EGRESS_SEEDS = {
+        "egress_deny_cidrs": os.environ.get("EGRESS_DENY_CIDRS", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"),
+        "egress_allow_ports": os.environ.get("EGRESS_ALLOW_PORTS", "80,443"),
+    }
+    async with async_session_factory() as db:
+        for _eg_key, _eg_value in _EGRESS_SEEDS.items():
+            _eg_row = (await db.execute(
+                select(SystemConfig).where(SystemConfig.key == _eg_key, SystemConfig.deleted_at.is_(None))
+            )).scalar_one_or_none()
+            if _eg_row is None:
+                await config_service.set_config(_eg_key, _eg_value, db)
+                logger.info("Egress 配置迁移: %s = %s", _eg_key, _eg_value)
+
     # ── 种子数据（幂等，每次启动执行）──
     from app.startup.seed import run_seed
     _seed_credentials = await run_seed(async_session_factory, is_ee=_fg.is_ee)

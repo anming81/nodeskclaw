@@ -5,7 +5,7 @@ import { useToast } from '@/composables/useToast'
 import { useNetworkConfig } from '@/composables/useNetworkConfig'
 import { resolveApiErrorMessage } from '@/i18n/error'
 import api from '@/services/api'
-import { Loader2, Save, Globe } from 'lucide-vue-next'
+import { Loader2, Save, Globe, AlertTriangle, Shield } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -13,12 +13,18 @@ const { invalidate } = useNetworkConfig()
 
 const loading = ref(false)
 const saving = ref(false)
+const savingEgress = ref(false)
 
 const form = ref({
   ingress_base_domain: '',
   ingress_subdomain_suffix: '',
   tls_secret_name: '',
   ingress_tls_enabled: true,
+})
+
+const egressForm = ref({
+  egress_deny_cidrs: '',
+  egress_allow_ports: '',
 })
 
 const previewProtocol = computed(() => form.value.ingress_tls_enabled ? 'https' : 'http')
@@ -40,6 +46,8 @@ async function loadSettings() {
     form.value.ingress_subdomain_suffix = data.ingress_subdomain_suffix || ''
     form.value.tls_secret_name = data.tls_secret_name || ''
     form.value.ingress_tls_enabled = data.ingress_tls_enabled !== 'false'
+    egressForm.value.egress_deny_cidrs = data.egress_deny_cidrs ?? ''
+    egressForm.value.egress_allow_ports = data.egress_allow_ports ?? ''
   } catch {
     // first-time setup may have no config
   } finally {
@@ -62,6 +70,21 @@ async function handleSave() {
     toast.error(resolveApiErrorMessage(e, t('orgSettings.networkSaveFailed')))
   } finally {
     saving.value = false
+  }
+}
+
+async function handleSaveEgress() {
+  savingEgress.value = true
+  try {
+    await Promise.all([
+      api.put('/settings/egress_deny_cidrs', { value: egressForm.value.egress_deny_cidrs.trim() }),
+      api.put('/settings/egress_allow_ports', { value: egressForm.value.egress_allow_ports.trim() }),
+    ])
+    toast.success(t('orgSettings.npSaved'))
+  } catch (e: unknown) {
+    toast.error(resolveApiErrorMessage(e, t('orgSettings.npSaveFailed')))
+  } finally {
+    savingEgress.value = false
   }
 }
 
@@ -154,5 +177,55 @@ onMounted(() => {
         </div>
       </div>
     </template>
+
+    <!-- Egress NetworkPolicy -->
+    <div v-if="!loading" class="border-t pt-6 space-y-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <Shield class="w-5 h-5 text-muted-foreground" />
+          <h3 class="text-base font-semibold">{{ t('orgSettings.npTitle') }}</h3>
+        </div>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('orgSettings.npDescription') }}</p>
+      </div>
+
+      <div class="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3">
+        <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+        <p class="text-xs text-amber-700 dark:text-amber-300">{{ t('orgSettings.npWarning') }}</p>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="text-sm font-medium">{{ t('orgSettings.npDenyCidrs') }}</label>
+        <input
+          v-model="egressForm.egress_deny_cidrs"
+          type="text"
+          placeholder="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+          class="w-full h-9 px-3 rounded-md border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+        />
+        <p class="text-xs text-muted-foreground">{{ t('orgSettings.npDenyCidrsHint') }}</p>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="text-sm font-medium">{{ t('orgSettings.npAllowPorts') }}</label>
+        <input
+          v-model="egressForm.egress_allow_ports"
+          type="text"
+          placeholder="80,443"
+          class="w-full h-9 px-3 rounded-md border border-input bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+        />
+        <p class="text-xs text-muted-foreground">{{ t('orgSettings.npAllowPortsHint') }}</p>
+      </div>
+
+      <div class="flex items-center gap-3 pt-2">
+        <button
+          :disabled="savingEgress"
+          class="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+          @click="handleSaveEgress"
+        >
+          <Loader2 v-if="savingEgress" class="w-4 h-4 animate-spin" />
+          <Save v-else class="w-4 h-4" />
+          {{ t('orgSettings.npSave') }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>

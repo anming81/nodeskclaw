@@ -27,6 +27,7 @@ _ALLOWED_KEYS = {
     "smtp_host", "smtp_port", "smtp_username", "smtp_password",
     "smtp_from_email", "smtp_from_name", "smtp_use_tls",
     "verification_email_subject", "verification_email_template",
+    "egress_deny_cidrs", "egress_allow_ports",
 }
 
 _SENSITIVE_KEYS = {"registry_password", "smtp_password"}

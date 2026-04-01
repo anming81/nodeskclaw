@@ -948,13 +948,25 @@ async def _execute_deploy_inner(ctx, async_session_factory, get_config, total, s
                     if peer_inst:
                         peer_namespaces.append(peer_inst.namespace)
 
-            egress_cfg = adapter.get_egress_config(ctx.advanced_config)
+            deny_str = await get_config("egress_deny_cidrs", db) or ""
+            ports_str = await get_config("egress_allow_ports", db) or ""
+
+            deny_cidrs = [c.strip() for c in deny_str.split(",") if c.strip()]
+            allow_ports = [int(p.strip()) for p in ports_str.split(",") if p.strip()]
+
+            if ctx.advanced_config:
+                inst_egress = ctx.advanced_config.get("network", {}).get("egress", {})
+                if inst_egress.get("deny_cidrs") is not None:
+                    deny_cidrs = inst_egress["deny_cidrs"]
+                if inst_egress.get("allow_ports") is not None:
+                    allow_ports = inst_egress["allow_ports"]
+
             np = build_network_policy(
                 f"{ctx.name}-isolation", ctx.namespace, labels,
                 peer_namespaces,
                 org_id=adapter.get_network_policy_org_id(ctx.org_id),
-                egress_deny_cidrs=egress_cfg.deny_cidrs,
-                egress_allow_ports=egress_cfg.allow_ports,
+                egress_deny_cidrs=deny_cidrs,
+                egress_allow_ports=allow_ports,
                 platform_namespace=settings.PLATFORM_NAMESPACE,
             )
             try:

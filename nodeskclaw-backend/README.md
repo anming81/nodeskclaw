@@ -419,8 +419,8 @@ CE/EE 模式覆盖：
 |------|------|
 | `LOGIN_EMAIL_WHITELIST` | 允许登录/注册的邮箱域名白名单（逗号分隔，如 `nodeskai.com`），为空则不限制 |
 | `GATEWAY_KUBECONFIG` | 本地开发时网关集群（infra）的 kubeconfig 文件路径。生产环境使用 in-cluster config，无需配置 |
-| `EGRESS_DENY_CIDRS` | AI 员工 Pod Egress NetworkPolicy 中拒绝访问的 CIDR 列表（逗号分隔），默认 `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` |
-| `EGRESS_ALLOW_PORTS` | AI 员工 Pod 公网出站允许的 TCP 端口（逗号分隔），默认 `80,443` |
+| `EGRESS_DENY_CIDRS` | **已废弃** — 已迁移至「组织设置 > 网络路由」页面管理。首次升级时自动迁移到数据库 |
+| `EGRESS_ALLOW_PORTS` | **已废弃** — 已迁移至「组织设置 > 网络路由」页面管理。首次升级时自动迁移到数据库 |
 | `PLATFORM_NAMESPACE` | 平台服务所在 namespace，NetworkPolicy 允许实例与该 namespace 双向通信。K8s 环境自动检测后端 Pod 所在 namespace，通常无需手动设置 |
 
 技能基因 Registry（多源聚合）：
