@@ -80,6 +80,7 @@ async def _seed_workspace_tasks(db: AsyncSession) -> str:
             status="archived",
             priority="medium",
             archived_at=now - timedelta(days=1),
+            archived_from_status="done",
             created_at=now - timedelta(days=4),
             updated_at=now - timedelta(days=1),
         ),
@@ -90,6 +91,7 @@ async def _seed_workspace_tasks(db: AsyncSession) -> str:
             status="archived",
             priority="medium",
             archived_at=now - timedelta(hours=1),
+            archived_from_status="done",
             created_at=now - timedelta(days=1),
             updated_at=now - timedelta(hours=1),
         ),
@@ -100,6 +102,7 @@ async def _seed_workspace_tasks(db: AsyncSession) -> str:
             status="archived",
             priority="low",
             archived_at=now - timedelta(minutes=30),
+            archived_from_status="done",
             created_at=now - timedelta(days=1),
             updated_at=now - timedelta(minutes=30),
             deleted_at=now - timedelta(minutes=5),
@@ -239,3 +242,78 @@ async def test_task_list_route_keeps_array_response_without_paginated(client, mo
     assert body["data"][0]["id"] == "task-plain"
     assert "pagination" not in body
     list_mock.assert_awaited_once_with(ANY, "ws-route", "done", True)
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_paginated_column_done_includes_archived(require_test_db):
+    async with TestSessionLocal() as db:
+        workspace_id = await _seed_workspace_tasks(db)
+
+        items, total = await list_tasks_paginated(
+            db,
+            workspace_id,
+            status="done",
+            bucket="column",
+            page=1,
+            page_size=20,
+        )
+
+        assert total == 3
+        ids = [item.id for item in items]
+        assert ids[0] == "task-done-active"
+        assert set(ids[1:]) == {"task-archived-new", "task-archived-old"}
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_paginated_column_pending_excludes_archived(require_test_db):
+    async with TestSessionLocal() as db:
+        workspace_id = await _seed_workspace_tasks(db)
+
+        items, total = await list_tasks_paginated(
+            db,
+            workspace_id,
+            status="pending",
+            bucket="column",
+            page=1,
+            page_size=20,
+        )
+
+        assert total == 1
+        assert [item.id for item in items] == ["task-pending"]
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_paginated_column_requires_status(require_test_db):
+    async with TestSessionLocal() as db:
+        workspace_id = await _seed_workspace_tasks(db)
+
+        items, total = await list_tasks_paginated(
+            db,
+            workspace_id,
+            bucket="column",
+            page=1,
+            page_size=20,
+        )
+
+        assert total == 0
+        assert items == []
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_paginated_column_archived_task_status_mapped(require_test_db):
+    async with TestSessionLocal() as db:
+        workspace_id = await _seed_workspace_tasks(db)
+
+        items, total = await list_tasks_paginated(
+            db,
+            workspace_id,
+            status="done",
+            bucket="column",
+            page=1,
+            page_size=20,
+        )
+
+        for item in items:
+            assert item.status == "done"
+        archived_items = [i for i in items if i.archived_at is not None]
+        assert len(archived_items) == 2
