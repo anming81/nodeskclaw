@@ -203,21 +203,34 @@ const isK8sCluster = computed(() => {
 })
 const showStorageClassSelector = computed(() => isK8sCluster.value && storageClasses.value.length > 0)
 
-const specs = [
-  { key: 'small', label: '轻量', desc: '写周报、查资料、日常问答', cpu: '2 核', mem: '4 GB' },
-  { key: 'medium', label: '标准', desc: '代码审查、文档生成、会议纪要', cpu: '4 核', mem: '8 GB' },
-  { key: 'large', label: '高性能', desc: '浏览器自动化、代码开发、数据分析', cpu: '8 核', mem: '16 GB' },
+interface SpecPreset {
+  key: string
+  label: string
+  desc: string
+  cpu: number
+  memory: number
+  storage: number
+  cpu_request: string
+  cpu_limit: string
+  mem_request: string
+  mem_limit: string
+  quota_cpu: string
+  quota_mem: string
+}
+
+const DEFAULT_SPEC_PRESETS: SpecPreset[] = [
+  { key: 'small', label: '轻量', desc: '写周报、查资料、日常问答', cpu: 2, memory: 4, storage: 20, cpu_request: '1000m', cpu_limit: '2000m', mem_request: '2Gi', mem_limit: '4Gi', quota_cpu: '2', quota_mem: '4Gi' },
+  { key: 'medium', label: '标准', desc: '代码审查、文档生成、会议纪要', cpu: 4, memory: 8, storage: 40, cpu_request: '2000m', cpu_limit: '4000m', mem_request: '4Gi', mem_limit: '8Gi', quota_cpu: '4', quota_mem: '8Gi' },
+  { key: 'large', label: '高性能', desc: '浏览器自动化、代码开发、数据分析', cpu: 8, memory: 16, storage: 80, cpu_request: '4000m', cpu_limit: '8000m', mem_request: '8Gi', mem_limit: '16Gi', quota_cpu: '8', quota_mem: '16Gi' },
 ]
 
-const specResources: Record<string, { cpu_req: string; cpu_lim: string; mem_req: string; mem_lim: string; quota_cpu: string; quota_mem: string; storage: number }> = {
-  small: { cpu_req: '1000m', cpu_lim: '2000m', mem_req: '2Gi', mem_lim: '4Gi', quota_cpu: '2', quota_mem: '4Gi', storage: 20 },
-  medium: { cpu_req: '2000m', cpu_lim: '4000m', mem_req: '4Gi', mem_lim: '8Gi', quota_cpu: '4', quota_mem: '8Gi', storage: 40 },
-  large: { cpu_req: '4000m', cpu_lim: '8000m', mem_req: '8Gi', mem_lim: '16Gi', quota_cpu: '8', quota_mem: '16Gi', storage: 80 },
-}
+const specPresets = ref<SpecPreset[]>([...DEFAULT_SPEC_PRESETS])
+const presetsLoading = ref(true)
 
 function selectSpec(key: string) {
   selectedSpec.value = key
-  storageGi.value = specResources[key]?.storage ?? 40
+  const found = specPresets.value.find(s => s.key === key)
+  storageGi.value = found?.storage ?? 40
 }
 
 const storageIndex = computed({
@@ -354,10 +367,25 @@ onMounted(async () => {
       }
     }
     await fetchImageTags()
+
+    try {
+      const presetRes = await api.get('/spec-presets')
+      const items = presetRes.data?.data
+      if (Array.isArray(items) && items.length > 0) {
+        specPresets.value = items
+      }
+    } catch {
+      // API unavailable (old backend / network) — keep defaults
+    } finally {
+      presetsLoading.value = false
+    }
+    selectedSpec.value = specPresets.value[0]?.key ?? 'small'
+    storageGi.value = specPresets.value[0]?.storage ?? 20
   } catch {
     // ignore init errors
   } finally {
     loadingInit.value = false
+    presetsLoading.value = false
   }
 
   const qTemplateId = route.query.template_id as string | undefined
@@ -410,7 +438,7 @@ async function handleDeploy() {
   deploying.value = true
   error.value = ''
 
-  const res_spec = specResources[selectedSpec.value]
+  const res_spec = specPresets.value.find(s => s.key === selectedSpec.value) ?? specPresets.value[0]
 
   try {
     for (const cfg of llmConfigs.value) {
@@ -439,10 +467,10 @@ async function handleDeploy() {
       cluster_id: clusters.value[0].id,
       image_version: selectedImage.value,
       replicas: 1,
-      cpu_request: res_spec.cpu_req,
-      cpu_limit: res_spec.cpu_lim,
-      mem_request: res_spec.mem_req,
-      mem_limit: res_spec.mem_lim,
+      cpu_request: res_spec.cpu_request,
+      cpu_limit: res_spec.cpu_limit,
+      mem_request: res_spec.mem_request,
+      mem_limit: res_spec.mem_limit,
       quota_cpu: res_spec.quota_cpu,
       quota_mem: res_spec.quota_mem,
       storage_class: selectedStorageClass.value || undefined,
@@ -704,7 +732,7 @@ async function handleDeploy() {
           <label class="text-sm font-medium">选择规格</label>
           <div class="grid grid-cols-3 gap-3">
             <button
-              v-for="spec in specs"
+              v-for="spec in specPresets"
               :key="spec.key"
               :class="[
                 'p-4 rounded-xl border text-left transition-all',
@@ -717,8 +745,8 @@ async function handleDeploy() {
               <div class="font-medium text-sm">{{ spec.label }}</div>
               <div class="text-xs text-muted-foreground mt-0.5">{{ spec.desc }}</div>
               <div class="flex gap-3 mt-2 text-xs text-muted-foreground">
-                <span>{{ spec.cpu }}</span>
-                <span>{{ spec.mem }}</span>
+                <span>{{ spec.cpu }} {{ t('orgSettings.specsCpuUnit') }}</span>
+                <span>{{ spec.memory }} GB</span>
               </div>
             </button>
           </div>
