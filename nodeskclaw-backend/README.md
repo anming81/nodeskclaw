@@ -34,6 +34,7 @@ nodeskclaw-backend/
 │   │   ├── instances.py      # 实例管理
 │   │   ├── channel_configs.py # Channel 配置 API
 │   │   ├── registry.py       # 镜像仓库
+│   │   ├── engine_versions.py # 引擎版本目录（发布/默认/废弃）
 │   │   ├── settings.py       # 系统配置
 │   │   ├── workspaces.py     # 工作区 CRUD、群聊、SSE
 │   │   ├── templates.py      # 工作区模板 CRUD、应用
@@ -52,6 +53,7 @@ nodeskclaw-backend/
 │   │   ├── cluster.py        # 集群
 │   │   ├── instance.py       # 实例（含 compute_provider/runtime 字段）
 │   │   ├── deploy_record.py  # 部署记录
+│   │   ├── engine_version.py # 引擎版本目录（发布状态、默认版本）
 │   │   ├── workspace.py      # 工作区
 │   │   ├── workspace_message.py  # 工作区群聊消息
 │   │   ├── workspace_member.py   # 工作区成员
@@ -77,6 +79,7 @@ nodeskclaw-backend/
 │   │   ├── deploy_service.py     # 部署编排
 │   │   ├── instance_service.py   # 实例操作
 │   │   ├── registry_service.py   # 镜像仓库查询、per-engine 仓库解析
+│   │   ├── engine_version_service.py # 引擎版本目录管理（发布/设默认/废弃）
 │   │   ├── config_service.py     # 系统配置读写
 │   │   ├── health_checker.py     # 集群健康巡检
 │   │   ├── workspace_service.py  # 工作区 CRUD + Agent 管理
@@ -169,6 +172,11 @@ API 路由同时挂载在两个前缀下：
 | `/api/v1/instances/{id}/channels/deploy-repo` | Channel 配置 | 部署项目仓库 Channel |
 | `/api/v1/events` | 事件 | SSE 实时推送 |
 | `/api/v1/registry` | 镜像仓库 | 仓库配置、Tag 查询（支持 `?runtime=` per-engine 查询） |
+| `GET /api/v1/engine-versions?runtime=` | 引擎版本目录 | 已发布版本列表（含默认标记） |
+| `GET /api/v1/engine-versions/default?runtime=` | 引擎版本目录 | 当前默认版本 |
+| `POST /api/v1/engine-versions` | 引擎版本目录 | 发布新版本（admin） |
+| `PATCH /api/v1/engine-versions/{id}` | 引擎版本目录 | 设默认/废弃（admin） |
+| `DELETE /api/v1/engine-versions/{id}` | 引擎版本目录 | 移除版本（admin） |
 | `/api/v1/settings` | 系统配置 | 配置读写 |
 | `/api/v1/workspaces` | 工作区 | CRUD、Agent 管理、群聊、SSE |
 | `/api/v1/workspaces/{ws}/chat` | 群聊 | 广播消息给所有 Agent |
