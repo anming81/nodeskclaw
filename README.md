@@ -246,7 +246,7 @@ Database migrations run automatically when the new backend pod starts. See [depl
 ### Upgrade Notes
 
 - **Back up your database** before any major version upgrade.
-- Check [GitHub Releases](https://github.com/patchwork-body/nodeskclaw/releases) for release notes and breaking changes.
+- Check [GitHub Releases](https://github.com/NoDeskAI/nodeskclaw/releases) for release notes and breaking changes.
 - If your database was not previously managed by Alembic, you may need to run `alembic stamp head` once before upgrading. See [Backend README](nodeskclaw-backend/README.md) for details.
 
 ## Documentation
