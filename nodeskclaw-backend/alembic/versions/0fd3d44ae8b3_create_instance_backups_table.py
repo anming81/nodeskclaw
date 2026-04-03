@@ -1,6 +1,6 @@
 """create_instance_backups_table
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 0fd3d44ae8b3
 Revises: c3d8f952a6ea
 Create Date: 2026-04-03 10:00:00.000000
 
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'a1b2c3d4e5f6'
+revision: str = '0fd3d44ae8b3'
 down_revision: Union[str, Sequence[str], None] = 'c3d8f952a6ea'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
