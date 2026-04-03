@@ -1278,3 +1278,289 @@ async def _execute_deploy_inner(ctx, async_session_factory, get_config, total, s
 
             cleanup_hint = "，命名空间已清理" if ns_cleaned else ""
             _publish(total, "失败", status="failed", message=f"{str(e)[:180]}{cleanup_hint}")
+
+
+# ── Rebuild ────────────────────────────────────────────────
+
+REBUILD_STEPS = [
+    "检查实例状态",
+    "重建命名空间",
+    "重建 ConfigMap",
+    "重建 PVC",
+    "重建 Deployment",
+    "重建 Service",
+    "重建 Ingress",
+    "配置网络策略",
+    "等待 Deployment 就绪",
+]
+
+
+async def rebuild_instance(
+    instance_id: str, user_id: str, db: AsyncSession, org_id: str | None = None
+) -> tuple[str, "_DeployContext"]:
+    """从 DB 状态重建 K8s 资源（同步阶段）。"""
+    from app.core.exceptions import ConflictError
+
+    result = await db.execute(
+        select(Instance).where(Instance.id == instance_id, Instance.deleted_at.is_(None))
+    )
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise NotFoundError("实例不存在", message_key="errors.instance.not_found")
+    if org_id and instance.org_id != org_id:
+        raise NotFoundError("实例不存在", message_key="errors.instance.not_found")
+
+    _TRANSITIONAL = {
+        InstanceStatus.deploying, InstanceStatus.updating,
+        InstanceStatus.rebuilding, InstanceStatus.restoring, InstanceStatus.deleting,
+    }
+    if instance.status in _TRANSITIONAL:
+        raise ConflictError(
+            message=f"实例正在 {instance.status.value}，请等待完成后再操作",
+            message_key="errors.instance.in_transitional_state",
+        )
+
+    cluster_result = await db.execute(
+        select(Cluster).where(Cluster.id == instance.cluster_id, Cluster.deleted_at.is_(None))
+    )
+    cluster = cluster_result.scalar_one_or_none()
+    if not cluster:
+        raise NotFoundError("关联集群不存在", message_key="errors.cluster.not_found")
+
+    instance.status = InstanceStatus.rebuilding
+    await db.commit()
+
+    max_rev = await db.execute(
+        select(func.coalesce(func.max(DeployRecord.revision), 0)).where(
+            DeployRecord.instance_id == instance.id, DeployRecord.deleted_at.is_(None)
+        )
+    )
+    next_rev = max_rev.scalar() + 1
+
+    record = DeployRecord(
+        instance_id=instance.id,
+        revision=next_rev,
+        action=DeployAction.rebuild,
+        image_version=instance.image_version,
+        status=DeployStatus.running,
+        triggered_by=user_id,
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+
+    env_vars = _json.loads(instance.env_vars) if instance.env_vars else {}
+    advanced = _json.loads(instance.advanced_config) if instance.advanced_config else None
+
+    ctx = _DeployContext(
+        record_id=record.id,
+        instance_id=instance.id,
+        cluster_id=cluster.id,
+        name=instance.slug or instance.name,
+        namespace=instance.namespace,
+        image_version=instance.image_version,
+        replicas=instance.replicas,
+        cpu_request=instance.cpu_request,
+        cpu_limit=instance.cpu_limit,
+        mem_request=instance.mem_request,
+        mem_limit=instance.mem_limit,
+        storage_class=instance.storage_class,
+        storage_size=instance.storage_size,
+        quota_cpu=instance.quota_cpu,
+        quota_mem=instance.quota_mem,
+        env_vars=env_vars,
+        advanced_config=advanced,
+        proxy_endpoint=cluster.proxy_endpoint,
+        org_id=instance.org_id,
+        compute_provider=instance.compute_provider,
+        runtime=instance.runtime,
+    )
+    return record.id, ctx
+
+
+async def execute_rebuild_pipeline(ctx: _DeployContext) -> None:
+    """后台重建管道：从 DB 状态重建全部 K8s 资源（不删除实例记录）。"""
+    from app.core.deps import async_session_factory
+    from app.services.config_service import get_config
+    from app.services.runtime.registries.compute_registry import require_k8s_client
+
+    steps = list(REBUILD_STEPS)
+    total = len(steps)
+
+    def _publish(step: int, step_name: str, *, status: str = "in_progress",
+                 message: str = "", logs: list[str] | None = None) -> None:
+        payload = DeployProgress(
+            deploy_id=ctx.record_id,
+            step=step,
+            total_steps=total,
+            current_step=step_name,
+            status=status,
+            message=message,
+            percent=round(step / total * 100) if status in ("success", "failed") else round((step - 0.5) / total * 100),
+            logs=logs,
+        )
+        if step == 1:
+            payload.step_names = steps
+        event_bus.publish("deploy_progress", payload.model_dump())
+
+    try:
+        await asyncio.sleep(0.3)
+        async with async_session_factory() as db:
+            cluster_result = await db.execute(
+                select(Cluster).where(Cluster.id == ctx.cluster_id, Cluster.deleted_at.is_(None))
+            )
+            cluster = cluster_result.scalar_one()
+            k8s = await require_k8s_client(cluster)
+            labels = build_labels(ctx.name, ctx.instance_id, ctx.image_version)
+            adapter = get_deploy_adapter()
+
+            _publish(1, steps[0])
+
+            # Namespace + ResourceQuota
+            _publish(2, steps[1])
+            ns_labels = adapter.get_namespace_labels(ctx.org_id)
+            await k8s.ensure_namespace(ctx.namespace, labels=ns_labels)
+            quota = build_resource_quota(ctx.namespace, ctx.name, ctx.quota_cpu, ctx.quota_mem,
+                                         storage_size=ctx.storage_size if ctx.storage_class else None)
+            await k8s.create_or_skip(quota)
+
+            # ConfigMap
+            _publish(3, steps[2])
+            if ctx.env_vars:
+                cm = build_configmap(ctx.namespace, ctx.name, ctx.env_vars)
+                await k8s.create_or_skip(cm)
+
+            # PVC
+            _publish(4, steps[3])
+            pvc = build_pvc(ctx.namespace, ctx.name, ctx.storage_class, ctx.storage_size)
+            await k8s.create_or_skip(pvc)
+
+            # Deployment
+            _publish(5, steps[4])
+            from app.services.registry_service import resolve_image_registry
+            image_registry = await resolve_image_registry(db, ctx.runtime) or "openclaw"
+            image = f"{image_registry}:{ctx.image_version}"
+
+            from app.services.runtime.registries.runtime_registry import RUNTIME_REGISTRY
+            rt_spec = RUNTIME_REGISTRY.get(ctx.runtime)
+            gw_port = rt_spec.gateway_port if rt_spec else 18789
+            health_path = rt_spec.health_probe_path if rt_spec else "/healthz"
+            readiness_path = rt_spec.readiness_probe_path if rt_spec else None
+
+            from app.services.k8s.resource_builder import build_registry_secret, REGISTRY_SECRET_NAME
+            reg_secret = build_registry_secret(ctx.namespace, image_registry, db_session=None)
+            if reg_secret:
+                await k8s.create_or_skip(reg_secret)
+            deployment = build_deployment(
+                namespace=ctx.namespace, name=ctx.name, image=image,
+                replicas=ctx.replicas, labels=labels,
+                cpu_request=ctx.cpu_request, cpu_limit=ctx.cpu_limit,
+                mem_request=ctx.mem_request, mem_limit=ctx.mem_limit,
+                has_configmap=bool(ctx.env_vars), storage_size=ctx.storage_size,
+                gateway_port=gw_port, health_probe_path=health_path,
+                readiness_probe_path=readiness_path,
+                advanced_config=ctx.advanced_config,
+                image_pull_secrets=[REGISTRY_SECRET_NAME] if reg_secret else None,
+            )
+            await k8s.apply(deployment)
+
+            # Service
+            _publish(6, steps[5])
+            svc = build_service(ctx.namespace, ctx.name, gateway_port=gw_port)
+            await k8s.create_or_skip(svc)
+
+            # Ingress
+            _publish(7, steps[6])
+            ingress_base = await get_config("ingress_base_domain", db)
+            tls_secret = await get_config("tls_secret_name", db)
+            has_proxy = bool(ctx.proxy_endpoint)
+            tls_secret = adapter.get_tls_secret(tls_secret, has_proxy)
+            if ingress_base:
+                ingress_host = f"{ctx.name}.{ingress_base}"
+                ingress = build_ingress(ctx.namespace, ctx.name, ingress_host,
+                                        tls_secret_name=tls_secret, gateway_port=gw_port)
+                await k8s.create_or_skip(ingress)
+                async with async_session_factory() as db2:
+                    inst = (await db2.execute(
+                        select(Instance).where(Instance.id == ctx.instance_id)
+                    )).scalar_one()
+                    inst.ingress_domain = ingress_host
+                    await db2.commit()
+                await adapter.setup_proxy(ctx, ingress_host)
+
+            # NetworkPolicy
+            _publish(8, steps[7])
+            np_org_id = adapter.get_network_policy_org_id(ctx.org_id)
+            np = build_network_policy(ctx.namespace, ctx.name, np_org_id)
+            try:
+                await k8s.create_or_skip(np)
+            except Exception:
+                try:
+                    await k8s.networking.patch_namespaced_network_policy(
+                        f"{ctx.name}-policy", ctx.namespace, np)
+                except Exception:
+                    logger.warning("NetworkPolicy create/patch failed for %s", ctx.namespace, exc_info=True)
+
+            # Wait for Deployment ready
+            _publish(9, steps[8])
+            deployment_ready = False
+            dep_status = {}
+            for tick in range(150):
+                dep_status = await k8s.get_deployment_status(ctx.namespace, ctx.name)
+                if dep_status.get("ready"):
+                    deployment_ready = True
+                    break
+                await asyncio.sleep(2)
+
+            rec_result = await db.execute(
+                select(DeployRecord).where(DeployRecord.id == ctx.record_id, DeployRecord.deleted_at.is_(None))
+            )
+            record = rec_result.scalar_one()
+            inst_result = await db.execute(
+                select(Instance).where(Instance.id == ctx.instance_id, Instance.deleted_at.is_(None))
+            )
+            instance = inst_result.scalar_one()
+
+            if deployment_ready:
+                record.status = DeployStatus.success
+                record.finished_at = datetime.now(timezone.utc)
+                instance.status = InstanceStatus.running
+                instance.available_replicas = dep_status.get("available_replicas", 0)
+                await db.commit()
+                _publish(total, "完成", status="success", message="重建成功")
+                logger.info("重建成功: %s (namespace=%s)", ctx.name, ctx.namespace)
+            else:
+                record.status = DeployStatus.failed
+                record.message = "重建超时: Deployment 未就绪"
+                record.finished_at = datetime.now(timezone.utc)
+                instance.status = InstanceStatus.failed
+                await db.commit()
+                _publish(total, "失败", status="failed", message="重建超时: Deployment 未就绪")
+                logger.warning("重建超时: %s (namespace=%s)", ctx.name, ctx.namespace)
+
+    except asyncio.CancelledError:
+        logger.info("重建协程被取消: %s", ctx.name)
+        return
+
+    except Exception as e:
+        logger.exception("重建失败: %s", ctx.name)
+        try:
+            async with async_session_factory() as db:
+                rec = (await db.execute(
+                    select(DeployRecord).where(DeployRecord.id == ctx.record_id, DeployRecord.deleted_at.is_(None))
+                )).scalar_one()
+                rec.status = DeployStatus.failed
+                rec.message = str(e)[:500]
+                rec.finished_at = datetime.now(timezone.utc)
+                inst = (await db.execute(
+                    select(Instance).where(Instance.id == ctx.instance_id, Instance.deleted_at.is_(None))
+                )).scalar_one()
+                inst.status = InstanceStatus.failed
+                await db.commit()
+        except Exception:
+            logger.exception("更新重建失败状态时出错")
+        _publish(total, "失败", status="failed", message=str(e)[:200])
+
+    finally:
+        _unregister_deploy_task(ctx.record_id)
