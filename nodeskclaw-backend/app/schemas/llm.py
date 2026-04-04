@@ -17,18 +17,18 @@ class ProviderModelsResponse(BaseModel):
     models: list[ModelInfo]
 
 
-# ── Org LLM Key ──────────────────────────────────────────
+# ── Org Model Provider (was OrgLlmKey) ──────────────────
 
-class OrgLlmKeyCreate(BaseModel):
+class OrgModelProviderCreate(BaseModel):
     provider: str = Field(..., max_length=32)
-    label: str = Field(..., max_length=128)
+    label: str | None = Field(None, max_length=128)
     api_key: str
     base_url: str | None = None
     org_token_limit: int | None = None
     system_token_limit: int | None = None
 
 
-class OrgLlmKeyUpdate(BaseModel):
+class OrgModelProviderUpdate(BaseModel):
     label: str | None = None
     api_key: str | None = None
     base_url: str | None = None
@@ -37,11 +37,11 @@ class OrgLlmKeyUpdate(BaseModel):
     is_active: bool | None = None
 
 
-class OrgLlmKeyInfo(BaseModel):
+class OrgModelProviderInfo(BaseModel):
     id: str
     org_id: str
     provider: str
-    label: str
+    label: str | None
     api_key_masked: str
     base_url: str | None
     org_token_limit: int | None
@@ -51,6 +51,12 @@ class OrgLlmKeyInfo(BaseModel):
     created_by: str
 
     model_config = {"from_attributes": True}
+
+
+# backward-compat aliases
+OrgLlmKeyCreate = OrgModelProviderCreate
+OrgLlmKeyUpdate = OrgModelProviderUpdate
+OrgLlmKeyInfo = OrgModelProviderInfo
 
 
 # ── User LLM Key ────────────────────────────────────────
@@ -73,26 +79,35 @@ class UserLlmKeyInfo(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── User LLM Config ─────────────────────────────────────
+# ── LLM Config Item (deploy request) ────────────────────
 
 class LlmConfigItem(BaseModel):
     provider: str
-    key_source: str = Field(..., pattern=r"^(org|personal)$")
+    key_source: str = Field(default="org", pattern=r"^(org|personal)$")
     selected_models: list[dict] | None = None
 
 
-class UserLlmConfigUpdate(BaseModel):
-    org_id: str
-    configs: list[LlmConfigItem]
-    instance_id: str | None = None
+# ── Instance Provider Config ────────────────────────────
 
-
-class UserLlmConfigInfo(BaseModel):
+class InstanceProviderConfigEntry(BaseModel):
     provider: str
     key_source: str
     selected_models: list[dict] | None = None
+    personal_key_masked: str | None = None
+    base_url: str | None = None
+    api_type: str | None = None
 
-    model_config = {"from_attributes": True}
+
+class InstanceProviderConfigItem(BaseModel):
+    provider: str
+    key_source: str = Field(..., pattern=r"^(org|personal)$")
+    selected_models: list[dict] | None = None
+    base_url: str | None = None
+    api_type: str | None = None
+
+
+class InstanceProviderConfigUpdate(BaseModel):
+    configs: list[InstanceProviderConfigItem]
 
 
 class LlmConfigUpdateResult(BaseModel):
@@ -100,7 +115,7 @@ class LlmConfigUpdateResult(BaseModel):
     affected_instances: list[dict] = []
 
 
-# ── Instance LLM Config (read-only) ─────────────────────
+# ── Instance LLM Config (admin read-only) ────────────────
 
 class InstanceLlmConfigInfo(BaseModel):
     provider: str
@@ -108,17 +123,20 @@ class InstanceLlmConfigInfo(BaseModel):
     api_key_masked: str | None = None
 
 
-# ── Available Key (for selector) ────────────────────────
+# ── Available Model Provider (for selector) ──────────────
 
-class AvailableLlmKey(BaseModel):
+class AvailableModelProvider(BaseModel):
     id: str
     provider: str
-    label: str
+    label: str | None
     api_key_masked: str
     is_active: bool
 
 
-# ── OpenClaw Pod Provider Config (live read) ────────────
+AvailableLlmKey = AvailableModelProvider
+
+
+# ── OpenClaw Pod Provider Config (live read) ─────────────
 
 class OpenClawProviderEntry(BaseModel):
     provider: str
@@ -133,24 +151,16 @@ class OpenClawConfigResponse(BaseModel):
     providers: list[OpenClawProviderEntry]
 
 
-# ── Instance LLM Config (per-instance, direct Pod file) ─
+# ── Deprecated (kept for import compat) ──────────────────
 
-class InstanceLlmConfigEntry(BaseModel):
+class UserLlmConfigInfo(BaseModel):
     provider: str
     key_source: str
     selected_models: list[dict] | None = None
-    personal_key_masked: str | None = None
-    base_url: str | None = None
-    api_type: str | None = None
+    model_config = {"from_attributes": True}
 
 
-class InstanceLlmConfigItem(BaseModel):
-    provider: str
-    key_source: str = Field(..., pattern=r"^(org|personal)$")
-    selected_models: list[dict] | None = None
-    base_url: str | None = None
-    api_type: str | None = None
-
-
-class InstanceLlmConfigUpdate(BaseModel):
-    configs: list[InstanceLlmConfigItem]
+class UserLlmConfigUpdate(BaseModel):
+    org_id: str
+    configs: list[LlmConfigItem]
+    instance_id: str | None = None

@@ -1,4 +1,4 @@
-"""LLM Key management endpoints: org keys, user keys, user configs."""
+"""LLM Key management endpoints: model providers, user keys, instance configs."""
 
 import logging
 
@@ -12,25 +12,22 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.security import get_current_user
 from app.models.base import not_deleted
 from app.models.instance import Instance, InstanceStatus
+from app.models.instance_provider_config import InstanceProviderConfig
 from app.models.llm_usage_log import LlmUsageLog
-from app.models.org_llm_key import OrgLlmKey
+from app.models.org_llm_key import OrgModelProvider
 from app.models.user import User
-from app.models.user_llm_config import UserLlmConfig
 from app.models.user_llm_key import UserLlmKey
 from app.schemas.common import ApiResponse
 from app.schemas.llm import (
-    AvailableLlmKey,
-    InstanceLlmConfigEntry,
+    AvailableModelProvider,
     InstanceLlmConfigInfo,
-    InstanceLlmConfigUpdate,
-    LlmConfigUpdateResult,
+    InstanceProviderConfigEntry,
+    InstanceProviderConfigUpdate,
     OpenClawConfigResponse,
-    OrgLlmKeyCreate,
-    OrgLlmKeyInfo,
-    OrgLlmKeyUpdate,
+    OrgModelProviderCreate,
+    OrgModelProviderInfo,
+    OrgModelProviderUpdate,
     ProviderModelsResponse,
-    UserLlmConfigInfo,
-    UserLlmConfigUpdate,
     UserLlmKeyCreate,
     UserLlmKeyInfo,
 )
@@ -66,20 +63,20 @@ async def _get_instance_in_org(instance_id: str, org_id: str, db: AsyncSession) 
 
 
 # ══════════════════════════════════════════════════════════
-# Org LLM Keys (Admin)
+# Org Model Providers (Admin)
 # ══════════════════════════════════════════════════════════
 
-@router.get("/orgs/{org_id}/llm-keys", response_model=ApiResponse[list[OrgLlmKeyInfo]])
-async def list_org_llm_keys(
+@router.get("/orgs/{org_id}/model-providers", response_model=ApiResponse[list[OrgModelProviderInfo]])
+async def list_model_providers(
     org_id: str,
     db: AsyncSession = Depends(get_db),
     _auth: tuple = Depends(require_org_admin),
 ):
     result = await db.execute(
-        select(OrgLlmKey).where(
-            OrgLlmKey.org_id == org_id,
-            not_deleted(OrgLlmKey),
-        ).order_by(OrgLlmKey.created_at)
+        select(OrgModelProvider).where(
+            OrgModelProvider.org_id == org_id,
+            not_deleted(OrgModelProvider),
+        ).order_by(OrgModelProvider.created_at)
     )
     keys = result.scalars().all()
 
@@ -98,7 +95,7 @@ async def list_org_llm_keys(
             usage_map[row[0]] = int(row[1])
 
     items = [
-        OrgLlmKeyInfo(
+        OrgModelProviderInfo(
             id=k.id,
             org_id=k.org_id,
             provider=k.provider,
@@ -116,18 +113,31 @@ async def list_org_llm_keys(
     return ApiResponse(data=items)
 
 
-@router.post("/orgs/{org_id}/llm-keys", response_model=ApiResponse[OrgLlmKeyInfo])
-async def create_org_llm_key(
+@router.post("/orgs/{org_id}/model-providers", response_model=ApiResponse[OrgModelProviderInfo])
+async def create_model_provider(
     org_id: str,
-    body: OrgLlmKeyCreate,
+    body: OrgModelProviderCreate,
     db: AsyncSession = Depends(get_db),
     _auth: tuple = Depends(require_org_admin),
 ):
     if is_codex_provider(body.provider):
         raise BadRequestError("Codex 仅支持个人配置，不支持 Working Plan")
 
+    dup_result = await db.execute(
+        select(OrgModelProvider).where(
+            OrgModelProvider.org_id == org_id,
+            OrgModelProvider.provider == body.provider,
+            not_deleted(OrgModelProvider),
+        )
+    )
+    if dup_result.scalar_one_or_none():
+        raise BadRequestError(
+            f"{body.provider} 已配置，请编辑现有配置",
+            "errors.model_provider.already_exists",
+        )
+
     user, _org = _auth
-    key = OrgLlmKey(
+    key = OrgModelProvider(
         org_id=org_id,
         provider=body.provider,
         label=body.label,
@@ -140,9 +150,9 @@ async def create_org_llm_key(
     db.add(key)
     await db.commit()
     await db.refresh(key)
-    logger.info("创建组织 LLM Key: org=%s provider=%s label=%s", org_id, body.provider, body.label)
-    await hooks.emit("operation_audit", action="llm_key.created", target_type="llm_key", target_id=key.id, actor_id=user.id, org_id=org_id)
-    return ApiResponse(data=OrgLlmKeyInfo(
+    logger.info("创建模型供应商: org=%s provider=%s", org_id, body.provider)
+    await hooks.emit("operation_audit", action="model_provider.created", target_type="model_provider", target_id=key.id, actor_id=user.id, org_id=org_id)
+    return ApiResponse(data=OrgModelProviderInfo(
         id=key.id, org_id=key.org_id, provider=key.provider, label=key.label,
         api_key_masked=_mask_key(key.api_key, key.provider), base_url=key.base_url,
         org_token_limit=key.org_token_limit, system_token_limit=key.system_token_limit,
@@ -150,22 +160,22 @@ async def create_org_llm_key(
     ))
 
 
-@router.patch("/orgs/{org_id}/llm-keys/{key_id}", response_model=ApiResponse[OrgLlmKeyInfo])
-async def update_org_llm_key(
+@router.patch("/orgs/{org_id}/model-providers/{key_id}", response_model=ApiResponse[OrgModelProviderInfo])
+async def update_model_provider(
     org_id: str,
     key_id: str,
-    body: OrgLlmKeyUpdate,
+    body: OrgModelProviderUpdate,
     db: AsyncSession = Depends(get_db),
     _auth: tuple = Depends(require_org_admin),
 ):
     result = await db.execute(
-        select(OrgLlmKey).where(
-            OrgLlmKey.id == key_id, OrgLlmKey.org_id == org_id, not_deleted(OrgLlmKey)
+        select(OrgModelProvider).where(
+            OrgModelProvider.id == key_id, OrgModelProvider.org_id == org_id, not_deleted(OrgModelProvider)
         )
     )
     key = result.scalar_one_or_none()
     if key is None:
-        raise NotFoundError("组织 LLM Key 不存在")
+        raise NotFoundError("模型供应商不存在")
     if is_codex_provider(key.provider):
         raise BadRequestError("Codex 仅支持个人配置，不支持 Working Plan")
 
@@ -173,8 +183,8 @@ async def update_org_llm_key(
         setattr(key, field, val)
     await db.commit()
     await db.refresh(key)
-    await hooks.emit("operation_audit", action="llm_key.updated", target_type="llm_key", target_id=key_id, actor_id=_auth[0].id, org_id=org_id)
-    return ApiResponse(data=OrgLlmKeyInfo(
+    await hooks.emit("operation_audit", action="model_provider.updated", target_type="model_provider", target_id=key_id, actor_id=_auth[0].id, org_id=org_id)
+    return ApiResponse(data=OrgModelProviderInfo(
         id=key.id, org_id=key.org_id, provider=key.provider, label=key.label,
         api_key_masked=_mask_key(key.api_key, key.provider), base_url=key.base_url,
         org_token_limit=key.org_token_limit, system_token_limit=key.system_token_limit,
@@ -182,50 +192,76 @@ async def update_org_llm_key(
     ))
 
 
-@router.delete("/orgs/{org_id}/llm-keys/{key_id}", response_model=ApiResponse)
-async def delete_org_llm_key(
+@router.delete("/orgs/{org_id}/model-providers/{key_id}", response_model=ApiResponse)
+async def delete_model_provider(
     org_id: str,
     key_id: str,
     db: AsyncSession = Depends(get_db),
     _auth: tuple = Depends(require_org_admin),
 ):
     result = await db.execute(
-        select(OrgLlmKey).where(
-            OrgLlmKey.id == key_id, OrgLlmKey.org_id == org_id, not_deleted(OrgLlmKey)
+        select(OrgModelProvider).where(
+            OrgModelProvider.id == key_id, OrgModelProvider.org_id == org_id, not_deleted(OrgModelProvider)
         )
     )
     key = result.scalar_one_or_none()
     if key is None:
-        raise NotFoundError("组织 LLM Key 不存在")
+        raise NotFoundError("模型供应商不存在")
 
     key.soft_delete()
     await db.commit()
-    logger.info("软删除组织 LLM Key: %s", key_id)
-    await hooks.emit("operation_audit", action="llm_key.deleted", target_type="llm_key", target_id=key_id, actor_id=_auth[0].id, org_id=org_id)
+    logger.info("软删除模型供应商: %s", key_id)
+    await hooks.emit("operation_audit", action="model_provider.deleted", target_type="model_provider", target_id=key_id, actor_id=_auth[0].id, org_id=org_id)
     return ApiResponse(message="已删除")
 
 
-@router.get("/orgs/{org_id}/available-llm-keys", response_model=ApiResponse[list[AvailableLlmKey]])
-async def list_available_llm_keys(
+@router.get("/orgs/{org_id}/model-providers/available", response_model=ApiResponse[list[AvailableModelProvider]])
+async def list_available_model_providers(
     org_id: str,
     db: AsyncSession = Depends(get_db),
     _auth: tuple = Depends(require_org_member),
 ):
     result = await db.execute(
-        select(OrgLlmKey).where(
-            OrgLlmKey.org_id == org_id,
-            OrgLlmKey.is_active.is_(True),
-            not_deleted(OrgLlmKey),
-        ).order_by(OrgLlmKey.provider, OrgLlmKey.label)
+        select(OrgModelProvider).where(
+            OrgModelProvider.org_id == org_id,
+            OrgModelProvider.is_active.is_(True),
+            not_deleted(OrgModelProvider),
+        ).order_by(OrgModelProvider.provider)
     )
     keys = result.scalars().all()
     return ApiResponse(data=[
-        AvailableLlmKey(
+        AvailableModelProvider(
             id=k.id, provider=k.provider, label=k.label,
             api_key_masked=_mask_key(k.api_key, k.provider), is_active=k.is_active,
         )
         for k in keys
     ])
+
+
+# backward-compat aliases for old routes
+@router.get("/orgs/{org_id}/llm-keys", response_model=ApiResponse[list[OrgModelProviderInfo]], include_in_schema=False)
+async def list_org_llm_keys(org_id: str, db: AsyncSession = Depends(get_db), _auth: tuple = Depends(require_org_admin)):
+    return await list_model_providers(org_id, db, _auth)
+
+
+@router.post("/orgs/{org_id}/llm-keys", response_model=ApiResponse[OrgModelProviderInfo], include_in_schema=False)
+async def create_org_llm_key(org_id: str, body: OrgModelProviderCreate, db: AsyncSession = Depends(get_db), _auth: tuple = Depends(require_org_admin)):
+    return await create_model_provider(org_id, body, db, _auth)
+
+
+@router.patch("/orgs/{org_id}/llm-keys/{key_id}", response_model=ApiResponse[OrgModelProviderInfo], include_in_schema=False)
+async def update_org_llm_key(org_id: str, key_id: str, body: OrgModelProviderUpdate, db: AsyncSession = Depends(get_db), _auth: tuple = Depends(require_org_admin)):
+    return await update_model_provider(org_id, key_id, body, db, _auth)
+
+
+@router.delete("/orgs/{org_id}/llm-keys/{key_id}", response_model=ApiResponse, include_in_schema=False)
+async def delete_org_llm_key(org_id: str, key_id: str, db: AsyncSession = Depends(get_db), _auth: tuple = Depends(require_org_admin)):
+    return await delete_model_provider(org_id, key_id, db, _auth)
+
+
+@router.get("/orgs/{org_id}/available-llm-keys", response_model=ApiResponse[list[AvailableModelProvider]], include_in_schema=False)
+async def list_available_llm_keys(org_id: str, db: AsyncSession = Depends(get_db), _auth: tuple = Depends(require_org_member)):
+    return await list_available_model_providers(org_id, db, _auth)
 
 
 # ══════════════════════════════════════════════════════════
@@ -332,12 +368,6 @@ async def list_provider_models(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Fetch available models from a provider's API.
-
-    - If api_key is provided, use it directly (personal key scenario).
-    - Otherwise, look up an active org key for the given (org_id, provider).
-    - base_url: optional override for custom providers.
-    """
     from app.services.model_catalog_service import fetch_provider_models
 
     if is_codex_provider(provider):
@@ -362,11 +392,11 @@ async def list_provider_models(
 
     if not resolved_key and org_id:
         result = await db.execute(
-            select(OrgLlmKey).where(
-                OrgLlmKey.org_id == org_id,
-                OrgLlmKey.provider == provider,
-                OrgLlmKey.is_active.is_(True),
-                not_deleted(OrgLlmKey),
+            select(OrgModelProvider).where(
+                OrgModelProvider.org_id == org_id,
+                OrgModelProvider.provider == provider,
+                OrgModelProvider.is_active.is_(True),
+                not_deleted(OrgModelProvider),
             ).limit(1)
         )
         org_key = result.scalar_one_or_none()
@@ -387,145 +417,11 @@ async def list_provider_models(
 
 
 # ══════════════════════════════════════════════════════════
-# User LLM Configs (Portal - key source selection)
+# Instance Provider Configs (per-instance)
 # ══════════════════════════════════════════════════════════
 
-@router.get("/users/me/llm-configs", response_model=ApiResponse[list[UserLlmConfigInfo]])
-async def get_user_llm_configs(
-    org_id: str = Query(...),
-    instance_id: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == current_user.id,
-            UserLlmConfig.org_id == org_id,
-            not_deleted(UserLlmConfig),
-        )
-    )
-    configs = list(result.scalars().all())
-
-    if instance_id:
-        inst_result = await db.execute(
-            select(Instance).where(
-                Instance.id == instance_id,
-                Instance.created_by == current_user.id,
-                Instance.deleted_at.is_(None),
-            )
-        )
-        instance = inst_result.scalar_one_or_none()
-        if instance and instance.llm_providers:
-            allowed = set(instance.llm_providers)
-            configs = [c for c in configs if c.provider in allowed]
-
-    return ApiResponse(data=[
-        UserLlmConfigInfo(
-            provider=c.provider,
-            key_source=c.key_source,
-            selected_models=c.selected_models,
-        )
-        for c in configs
-    ])
-
-
-@router.put("/users/me/llm-configs", response_model=ApiResponse[LlmConfigUpdateResult])
-async def update_user_llm_configs(
-    body: UserLlmConfigUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    old_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == current_user.id,
-            UserLlmConfig.org_id == body.org_id,
-            not_deleted(UserLlmConfig),
-        )
-    )
-    old_configs = old_result.scalars().all()
-    old_providers = {c.provider for c in old_configs}
-    old_map = {c.provider: c for c in old_configs}
-
-    new_providers = {c.provider for c in body.configs}
-
-    for item in body.configs:
-        selected_models = normalize_selected_models(item.provider, item.selected_models)
-        existing = old_map.get(item.provider)
-        if existing:
-            existing.key_source = item.key_source
-            existing.org_llm_key_id = None
-            existing.selected_models = selected_models
-        else:
-            db.add(UserLlmConfig(
-                user_id=current_user.id,
-                org_id=body.org_id,
-                provider=item.provider,
-                key_source=item.key_source,
-                selected_models=selected_models,
-            ))
-
-    if body.instance_id:
-        inst_q = await db.execute(
-            select(Instance).where(
-                Instance.id == body.instance_id,
-                Instance.created_by == current_user.id,
-                Instance.deleted_at.is_(None),
-            )
-        )
-        target_instance = inst_q.scalar_one_or_none()
-        if target_instance:
-            target_instance.llm_providers = [c.provider for c in body.configs]
-
-        other_inst_q = await db.execute(
-            select(Instance).where(
-                Instance.created_by == current_user.id,
-                Instance.org_id == body.org_id,
-                Instance.deleted_at.is_(None),
-                Instance.id != body.instance_id,
-                Instance.llm_providers.isnot(None),
-            )
-        )
-        other_instances = other_inst_q.scalars().all()
-        referenced: set[str] = set()
-        for inst in other_instances:
-            if inst.llm_providers:
-                referenced.update(inst.llm_providers)
-
-        for provider in old_providers - new_providers:
-            if provider not in referenced:
-                old_map[provider].soft_delete()
-    else:
-        for provider in old_providers - new_providers:
-            old_map[provider].soft_delete()
-
-    await db.commit()
-
-    providers_changed = old_providers != new_providers
-    affected: list[dict] = []
-    if providers_changed:
-        inst_result = await db.execute(
-            select(Instance).where(
-                Instance.created_by == current_user.id,
-                Instance.org_id == body.org_id,
-                Instance.status == InstanceStatus.running,
-                Instance.deleted_at.is_(None),
-            )
-        )
-        instances = inst_result.scalars().all()
-        affected = [{"id": i.id, "name": i.name} for i in instances]
-
-    return ApiResponse(data=LlmConfigUpdateResult(
-        needs_restart=providers_changed and len(affected) > 0,
-        affected_instances=affected,
-    ))
-
-
-# ══════════════════════════════════════════════════════════
-# Instance LLM Config (read-only)
-# ══════════════════════════════════════════════════════════
-
-@router.get("/instances/{instance_id}/llm-configs", response_model=ApiResponse[list[InstanceLlmConfigEntry]])
-async def get_instance_llm_configs(
+@router.get("/instances/{instance_id}/provider-configs", response_model=ApiResponse[list[InstanceProviderConfigEntry]])
+async def get_instance_provider_configs(
     instance_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -536,13 +432,13 @@ async def get_instance_llm_configs(
 
     from app.services.llm_config_service import read_instance_llm_configs
     entries = await read_instance_llm_configs(instance, db, current_user.id)
-    return ApiResponse(data=[InstanceLlmConfigEntry(**e) for e in entries])
+    return ApiResponse(data=[InstanceProviderConfigEntry(**e) for e in entries])
 
 
-@router.put("/instances/{instance_id}/llm-configs", response_model=ApiResponse)
-async def update_instance_llm_configs(
+@router.put("/instances/{instance_id}/provider-configs", response_model=ApiResponse)
+async def update_instance_provider_configs(
     instance_id: str,
-    body: InstanceLlmConfigUpdate,
+    body: InstanceProviderConfigUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     org_ctx=Depends(get_current_org),
@@ -568,40 +464,26 @@ async def update_instance_llm_configs(
     from app.services.llm_config_service import write_instance_llm_configs
     await write_instance_llm_configs(instance, db, body.configs, current_user.id)
 
-    owner_id = instance.created_by
-    existing_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == owner_id,
-            UserLlmConfig.org_id == instance.org_id,
-            not_deleted(UserLlmConfig),
-        )
-    )
-    existing_map = {c.provider: c for c in existing_result.scalars().all()}
-
-    for cfg in body.configs:
-        selected_models = normalize_selected_models(cfg.provider, cfg.selected_models)
-        existing = existing_map.get(cfg.provider)
-        if existing:
-            existing.key_source = cfg.key_source
-            existing.selected_models = selected_models
-        else:
-            db.add(UserLlmConfig(
-                user_id=owner_id,
-                org_id=instance.org_id,
-                provider=cfg.provider,
-                key_source=cfg.key_source,
-                selected_models=selected_models,
-            ))
-
     instance.llm_providers = [c.provider for c in body.configs]
     await db.commit()
 
     logger.info(
-        "已同步 LLM 配置到 DB: instance=%s providers=%s",
+        "已更新实例 provider 配置: instance=%s providers=%s",
         instance.name, [c.provider for c in body.configs],
     )
     await hooks.emit("operation_audit", action="instance.llm_config_updated", target_type="instance", target_id=instance_id, actor_id=current_user.id, org_id=instance.org_id)
     return ApiResponse(message="配置已写入")
+
+
+# backward-compat aliases for old instance llm-configs routes
+@router.get("/instances/{instance_id}/llm-configs", response_model=ApiResponse[list[InstanceProviderConfigEntry]], include_in_schema=False)
+async def get_instance_llm_configs(instance_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user), org_ctx=Depends(get_current_org)):
+    return await get_instance_provider_configs(instance_id, db, current_user, org_ctx)
+
+
+@router.put("/instances/{instance_id}/llm-configs", response_model=ApiResponse, include_in_schema=False)
+async def update_instance_llm_configs(instance_id: str, body: InstanceProviderConfigUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user), org_ctx=Depends(get_current_org)):
+    return await update_instance_provider_configs(instance_id, body, db, current_user, org_ctx)
 
 
 @router.post("/instances/{instance_id}/restart-runtime", response_model=ApiResponse[dict])
@@ -646,14 +528,13 @@ async def get_instance_llm_config(
     _current_user, org = org_ctx
     instance = await _get_instance_in_org(instance_id, org.id, db)
 
-    configs_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == instance.created_by,
-            UserLlmConfig.org_id == instance.org_id,
-            not_deleted(UserLlmConfig),
+    ipc_result = await db.execute(
+        select(InstanceProviderConfig).where(
+            InstanceProviderConfig.instance_id == instance.id,
+            not_deleted(InstanceProviderConfig),
         )
     )
-    configs = configs_result.scalars().all()
+    ipc_list = ipc_result.scalars().all()
 
     user_keys_result = await db.execute(
         select(UserLlmKey).where(
@@ -664,7 +545,7 @@ async def get_instance_llm_config(
     user_keys = {k.provider: k for k in user_keys_result.scalars().all()}
 
     items: list[InstanceLlmConfigInfo] = []
-    for c in configs:
+    for c in ipc_list:
         masked = None
         if c.key_source == "personal":
             uk = user_keys.get(c.provider)

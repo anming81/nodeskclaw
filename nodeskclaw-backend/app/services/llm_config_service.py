@@ -15,8 +15,8 @@ from app.core.exceptions import AppException, BadRequestError
 from app.models.base import not_deleted
 from app.models.cluster import Cluster
 from app.models.instance import Instance
-from app.models.instance_llm_override import InstanceLlmOverride
-from app.models.user_llm_config import UserLlmConfig
+from app.models.instance_provider_config import InstanceProviderConfig
+from app.models.org_llm_key import OrgModelProvider
 from app.models.user_llm_key import UserLlmKey
 from app.schemas.llm import OpenClawConfigResponse, OpenClawProviderEntry
 from app.services.codex_provider import is_codex_provider, mask_personal_key, normalize_selected_models
@@ -70,21 +70,12 @@ def _build_providers_config(
     user_keys: dict[str, UserLlmKey],
     *,
     use_external_proxy: bool = False,
-    overrides: dict[str, dict] | None = None,
 ) -> dict:
     """Build the models.providers section for openclaw.json.
 
     configs: objects with .provider, .key_source, .selected_models
-    (UserLlmConfig ORM or InstanceLlmConfigItem schema both work)
-
-    org  key_source  -> proxy URL + wp_api_key
-    personal key_source -> provider base URL + user's real API key
-
-    use_external_proxy: True when the instance is on a remote cluster
-    (K8s internal DNS unreachable), forcing the external LLM proxy URL.
-
-    overrides: per-instance base_url/api_type overrides keyed by provider,
-    e.g. {"my-provider": {"base_url": "https://...", "api_type": "openai-completions"}}
+    (InstanceProviderConfig ORM or InstanceProviderConfigItem schema both work).
+    Optionally reads .base_url / .api_type from config objects directly.
     """
     if use_external_proxy:
         proxy_url = (settings.LLM_PROXY_URL or "").rstrip("/")
@@ -93,7 +84,8 @@ def _build_providers_config(
     providers: dict = {}
     for cfg in configs:
         provider = cfg.provider
-        ov = (overrides or {}).get(provider, {})
+        cfg_base_url = getattr(cfg, "base_url", None)
+        cfg_api_type = getattr(cfg, "api_type", None)
         if is_codex_provider(provider):
             if not proxy_url:
                 logger.error("LLM_PROXY_URL 未配置，Codex 模式无法生成 proxy URL")
@@ -108,7 +100,7 @@ def _build_providers_config(
                 logger.warning("个人 Key 缺失，跳过 provider=%s", provider)
                 continue
             entry: dict = {
-                "baseUrl": ov.get("base_url") or uk.base_url or PROVIDER_BASE_URLS.get(provider, ""),
+                "baseUrl": cfg_base_url or uk.base_url or PROVIDER_BASE_URLS.get(provider, ""),
                 "apiKey": uk.api_key,
             }
         else:
@@ -123,7 +115,7 @@ def _build_providers_config(
             }
 
         uk = user_keys.get(provider)
-        api_type = ov.get("api_type") or PROVIDER_API_TYPE.get(provider) or (uk.api_type if uk else None)
+        api_type = cfg_api_type or PROVIDER_API_TYPE.get(provider) or (uk.api_type if uk else None)
         if api_type:
             entry["api"] = api_type
 
@@ -299,14 +291,13 @@ async def read_openclaw_providers(
         ) if h
     ]
 
-    configs_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == instance.created_by,
-            UserLlmConfig.org_id == instance.org_id,
-            not_deleted(UserLlmConfig),
+    ipc_result = await db.execute(
+        select(InstanceProviderConfig).where(
+            InstanceProviderConfig.instance_id == instance.id,
+            not_deleted(InstanceProviderConfig),
         )
     )
-    db_configs = {c.provider: c for c in configs_result.scalars().all()}
+    ipc_map = {c.provider: c for c in ipc_result.scalars().all()}
 
     user_keys_result = await db.execute(
         select(UserLlmKey).where(
@@ -324,13 +315,18 @@ async def read_openclaw_providers(
         key_source: str | None = None
         api_key_masked: str | None = None
 
-        db_cfg = db_configs.get(provider)
-        if db_cfg:
-            key_source = db_cfg.key_source
-            if db_cfg.key_source == "personal":
-                uk = user_keys.get(provider)
-                if uk:
-                    api_key_masked = mask_personal_key(uk.provider, uk.api_key)
+        ipc = ipc_map.get(provider)
+        if ipc:
+            key_source = ipc.key_source
+        elif is_proxy:
+            key_source = "org"
+        else:
+            key_source = "personal"
+
+        if key_source == "personal":
+            uk = user_keys.get(provider)
+            if uk:
+                api_key_masked = mask_personal_key(uk.provider, uk.api_key)
 
         entries.append(OpenClawProviderEntry(
             provider=provider,
@@ -359,30 +355,26 @@ def _from_openclaw_models(models: list[dict]) -> list[dict]:
 async def read_instance_llm_configs(
     instance: Instance, db: AsyncSession, current_user_id: str,
 ) -> list[dict]:
-    """Read LLM provider configs directly from Pod's openclaw.json.
+    """Read LLM provider configs from DB (InstanceProviderConfig) + Pod openclaw.json.
 
-    Returns a list of dicts suitable for InstanceLlmConfigEntry.
+    Returns a list of dicts suitable for InstanceProviderConfigEntry.
     """
-    async with remote_fs(instance, db) as fs:
-        try:
-            raw_json = await _read_config_file(fs)
-        except ValueError as e:
-            logger.warning("read_instance_llm_configs: parse error: %s", e)
-            raw_json = None
+    ipc_result = await db.execute(
+        select(InstanceProviderConfig).where(
+            InstanceProviderConfig.instance_id == instance.id,
+            not_deleted(InstanceProviderConfig),
+        )
+    )
+    ipc_map = {c.provider: c for c in ipc_result.scalars().all()}
 
-    if not raw_json:
-        return []
-
-    pod_providers: dict = raw_json.get("models", {}).get("providers", {})
-    if not pod_providers:
-        return []
-
-    proxy_hosts = [
-        h for h in (
-            (settings.LLM_PROXY_INTERNAL_URL or "").rstrip("/"),
-            (settings.LLM_PROXY_URL or "").rstrip("/"),
-        ) if h
-    ]
+    org_result = await db.execute(
+        select(OrgModelProvider).where(
+            OrgModelProvider.org_id == instance.org_id,
+            OrgModelProvider.is_active.is_(True),
+            not_deleted(OrgModelProvider),
+        )
+    )
+    org_providers = {op.provider for op in org_result.scalars().all()}
 
     user_keys_result = await db.execute(
         select(UserLlmKey).where(
@@ -392,39 +384,17 @@ async def read_instance_llm_configs(
     )
     user_keys = {k.provider: k for k in user_keys_result.scalars().all()}
 
-    db_configs_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == instance.created_by,
-            UserLlmConfig.org_id == instance.org_id,
-            not_deleted(UserLlmConfig),
-        )
-    )
-    db_configs = {c.provider: c for c in db_configs_result.scalars().all()}
-
-    override_result = await db.execute(
-        select(InstanceLlmOverride).where(
-            InstanceLlmOverride.instance_id == instance.id,
-            not_deleted(InstanceLlmOverride),
-        )
-    )
-    overrides = {ov.provider: ov for ov in override_result.scalars().all()}
+    all_providers = set(ipc_map.keys()) | org_providers
 
     entries: list[dict] = []
-    for provider, prov_cfg in pod_providers.items():
-        pod_base_url = prov_cfg.get("baseUrl", "")
-        is_proxy = any(h in pod_base_url for h in proxy_hosts)
-        db_cfg = db_configs.get(provider)
-        key_source = db_cfg.key_source if db_cfg else ("org" if is_proxy else "personal")
-
-        models_raw = prov_cfg.get("models", [])
+    for provider in sorted(all_providers):
+        ipc = ipc_map.get(provider)
+        key_source = ipc.key_source if ipc else "org"
         selected_models = normalize_selected_models(
-            provider,
-            _from_openclaw_models(models_raw) if models_raw else None,
+            provider, ipc.selected_models if ipc else None,
         )
 
         uk = user_keys.get(provider)
-        override = overrides.get(provider)
-
         personal_key_masked: str | None = None
         if key_source == "personal" and uk:
             personal_key_masked = mask_personal_key(uk.provider, uk.api_key)
@@ -434,8 +404,8 @@ async def read_instance_llm_configs(
             "key_source": key_source,
             "selected_models": selected_models,
             "personal_key_masked": personal_key_masked,
-            "base_url": (override.base_url if override else None) or (uk.base_url if uk else None),
-            "api_type": (override.api_type if override else None) or (uk.api_type if uk else None),
+            "base_url": (ipc.base_url if ipc else None) or (uk.base_url if uk else None),
+            "api_type": (ipc.api_type if ipc else None) or (uk.api_type if uk else None),
         })
 
     return entries
@@ -444,11 +414,47 @@ async def read_instance_llm_configs(
 async def write_instance_llm_configs(
     instance: Instance, db: AsyncSession, configs: list, current_user_id: str,
 ) -> None:
-    """Write LLM provider configs directly to Pod's openclaw.json.
+    """Write LLM provider configs to DB (InstanceProviderConfig) and Pod's openclaw.json.
 
-    configs: list of InstanceLlmConfigItem (or anything with .provider, .key_source, .selected_models)
+    configs: list of InstanceProviderConfigItem (or anything with .provider, .key_source, .selected_models)
     """
     wp_api_key = instance.wp_api_key or ""
+
+    existing_result = await db.execute(
+        select(InstanceProviderConfig).where(
+            InstanceProviderConfig.instance_id == instance.id,
+            not_deleted(InstanceProviderConfig),
+        )
+    )
+    existing_map = {ipc.provider: ipc for ipc in existing_result.scalars().all()}
+
+    new_providers = set()
+    for cfg in configs:
+        new_providers.add(cfg.provider)
+        selected_models = normalize_selected_models(cfg.provider, cfg.selected_models)
+        cfg_base_url = getattr(cfg, "base_url", None)
+        cfg_api_type = getattr(cfg, "api_type", None)
+        existing = existing_map.get(cfg.provider)
+        if existing:
+            existing.key_source = cfg.key_source
+            existing.selected_models = selected_models
+            existing.base_url = cfg_base_url
+            existing.api_type = cfg_api_type
+        else:
+            db.add(InstanceProviderConfig(
+                instance_id=instance.id,
+                provider=cfg.provider,
+                key_source=cfg.key_source,
+                selected_models=selected_models,
+                base_url=cfg_base_url,
+                api_type=cfg_api_type,
+            ))
+
+    for provider, ipc in existing_map.items():
+        if provider not in new_providers:
+            ipc.soft_delete()
+
+    await db.flush()
 
     personal_providers = [c.provider for c in configs if c.key_source == "personal"]
     user_keys: dict[str, UserLlmKey] = {}
@@ -462,33 +468,6 @@ async def write_instance_llm_configs(
         )
         user_keys = {k.provider: k for k in uk_result.scalars().all()}
 
-    overrides_dict: dict[str, dict] = {}
-    for cfg in configs:
-        cfg_base_url = getattr(cfg, "base_url", None)
-        cfg_api_type = getattr(cfg, "api_type", None)
-        if cfg_base_url or cfg_api_type:
-            ov_result = await db.execute(
-                select(InstanceLlmOverride).where(
-                    InstanceLlmOverride.instance_id == instance.id,
-                    InstanceLlmOverride.provider == cfg.provider,
-                    not_deleted(InstanceLlmOverride),
-                )
-            )
-            ov = ov_result.scalar_one_or_none()
-            if ov is None:
-                ov = InstanceLlmOverride(
-                    instance_id=instance.id,
-                    provider=cfg.provider,
-                    base_url=cfg_base_url,
-                    api_type=cfg_api_type,
-                )
-                db.add(ov)
-            else:
-                ov.base_url = cfg_base_url
-                ov.api_type = cfg_api_type
-            overrides_dict[cfg.provider] = {"base_url": cfg_base_url, "api_type": cfg_api_type}
-    await db.flush()
-
     cluster_result = await db.execute(
         select(Cluster).where(Cluster.id == instance.cluster_id, not_deleted(Cluster))
     )
@@ -497,7 +476,7 @@ async def write_instance_llm_configs(
 
     providers = _build_providers_config(
         configs, wp_api_key, user_keys,
-        use_external_proxy=use_external, overrides=overrides_dict,
+        use_external_proxy=use_external,
     )
     if instance.compute_provider == "docker":
         _docker_rewrite_urls(providers)
@@ -535,21 +514,39 @@ async def write_instance_llm_configs(
 async def sync_openclaw_llm_config(instance: Instance, db: AsyncSession) -> None:
     """Write LLM config to openclaw.json via NFS.
 
+    Reads from InstanceProviderConfig + OrgModelProvider to build provider list.
     org  -> proxy URL + proxy token
     personal -> provider base URL + real API key
     """
-    configs_result = await db.execute(
-        select(UserLlmConfig).where(
-            UserLlmConfig.user_id == instance.created_by,
-            UserLlmConfig.org_id == instance.org_id,
-            not_deleted(UserLlmConfig),
+    from types import SimpleNamespace
+
+    ipc_result = await db.execute(
+        select(InstanceProviderConfig).where(
+            InstanceProviderConfig.instance_id == instance.id,
+            not_deleted(InstanceProviderConfig),
         )
     )
-    configs = list(configs_result.scalars().all())
+    ipc_list = list(ipc_result.scalars().all())
+    ipc_providers = {ipc.provider for ipc in ipc_list}
 
-    if instance.llm_providers:
-        allowed = set(instance.llm_providers)
-        configs = [c for c in configs if c.provider in allowed]
+    org_result = await db.execute(
+        select(OrgModelProvider).where(
+            OrgModelProvider.org_id == instance.org_id,
+            OrgModelProvider.is_active.is_(True),
+            not_deleted(OrgModelProvider),
+        )
+    )
+    org_providers = {op.provider for op in org_result.scalars().all()}
+
+    configs: list = list(ipc_list)
+    for provider in org_providers - ipc_providers:
+        configs.append(SimpleNamespace(
+            provider=provider,
+            key_source="org",
+            selected_models=None,
+            base_url=None,
+            api_type=None,
+        ))
 
     if not configs:
         logger.info("实例 %s 无 LLM 配置，跳过写入", instance.name)
@@ -573,17 +570,6 @@ async def sync_openclaw_llm_config(instance: Instance, db: AsyncSession) -> None
     if has_org and not wp_api_key:
         logger.warning("实例 %s 缺少 wp_api_key，Working Plan 模式无法写入", instance.name)
 
-    override_result = await db.execute(
-        select(InstanceLlmOverride).where(
-            InstanceLlmOverride.instance_id == instance.id,
-            not_deleted(InstanceLlmOverride),
-        )
-    )
-    overrides_dict = {
-        ov.provider: {"base_url": ov.base_url, "api_type": ov.api_type}
-        for ov in override_result.scalars().all()
-    }
-
     cluster_result = await db.execute(
         select(Cluster).where(Cluster.id == instance.cluster_id, not_deleted(Cluster))
     )
@@ -592,7 +578,7 @@ async def sync_openclaw_llm_config(instance: Instance, db: AsyncSession) -> None
 
     providers = _build_providers_config(
         configs, wp_api_key, user_keys,
-        use_external_proxy=use_external, overrides=overrides_dict,
+        use_external_proxy=use_external,
     )
     if instance.compute_provider == "docker":
         _docker_rewrite_urls(providers)

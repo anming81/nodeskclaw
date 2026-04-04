@@ -44,6 +44,17 @@ from app.services.codex_provider import normalize_selected_models
 
 logger = logging.getLogger(__name__)
 
+
+def _compute_llm_providers(
+    llm_configs: list | None, org_active_providers: list[str],
+) -> list[str] | None:
+    """Merge user-requested providers with org active providers into a snapshot list."""
+    providers: set[str] = set(org_active_providers)
+    if llm_configs:
+        for c in llm_configs:
+            providers.add(c.provider)
+    return sorted(providers) if providers else None
+
 # 正在运行的部署任务引用（deploy_id -> asyncio.Task）
 _running_tasks: dict[str, asyncio.Task] = {}
 
@@ -434,6 +445,16 @@ async def deploy_instance(
                 message_key="errors.deploy.ingress_base_domain_required",
             )
 
+    from app.models.org_llm_key import OrgModelProvider
+    org_prov_result = await db.execute(
+        select(OrgModelProvider.provider).where(
+            OrgModelProvider.org_id == (org_id or org.id),
+            OrgModelProvider.is_active.is_(True),
+            OrgModelProvider.deleted_at.is_(None),
+        )
+    )
+    org_active_providers = [r[0] for r in org_prov_result.all()]
+
     env_vars = dict(req.env_vars) if req.env_vars else {}
     gateway_token = env_vars.get("GATEWAY_TOKEN") or env_vars.get("OPENCLAW_GATEWAY_TOKEN")
     if not gateway_token:
@@ -468,7 +489,7 @@ async def deploy_instance(
         wp_api_key=f"nodeskclaw-wp-{_secrets.token_hex(32)}",
         env_vars=_json.dumps(env_vars),
         advanced_config=_json.dumps(req.advanced_config) if req.advanced_config else None,
-        llm_providers=[c.provider for c in req.llm_configs] if req.llm_configs else None,
+        llm_providers=_compute_llm_providers(req.llm_configs, org_active_providers),
         storage_class=req.storage_class,
         storage_size=req.storage_size,
         runtime=req.runtime,
@@ -492,35 +513,21 @@ async def deploy_instance(
 
     if req.llm_configs:
         from app.models.base import not_deleted
-        from app.models.user_llm_config import UserLlmConfig
-
-        existing_result = await db.execute(
-            select(UserLlmConfig).where(
-                UserLlmConfig.user_id == user.id,
-                UserLlmConfig.org_id == org_id,
-                not_deleted(UserLlmConfig),
-            )
-        )
-        existing_map = {c.provider: c for c in existing_result.scalars().all()}
+        from app.models.instance_provider_config import InstanceProviderConfig
 
         for item in req.llm_configs:
             selected_models = normalize_selected_models(item.provider, item.selected_models)
-            existing = existing_map.get(item.provider)
-            if existing:
-                existing.key_source = item.key_source
-                existing.selected_models = selected_models
-            else:
-                db.add(UserLlmConfig(
-                    user_id=user.id,
-                    org_id=org_id,
+            if item.key_source == "personal" or selected_models:
+                db.add(InstanceProviderConfig(
+                    instance_id=instance.id,
                     provider=item.provider,
                     key_source=item.key_source,
                     selected_models=selected_models,
                 ))
         await db.commit()
         logger.info(
-            "已保存用户 LLM 配置: user=%s org=%s providers=%s",
-            user.id, org_id, [c.provider for c in req.llm_configs],
+            "已保存实例 provider 配置: instance=%s providers=%s",
+            instance.id, [c.provider for c in req.llm_configs],
         )
 
     # 解析模板基因
