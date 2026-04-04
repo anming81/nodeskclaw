@@ -77,6 +77,14 @@ vue-tsc -b                                # 类型检查
 - 禁止 `db.delete()` 和原生 `DELETE FROM`
 - 唯一约束使用 Partial Unique Index：`Index(..., unique=True, postgresql_where=text("deleted_at IS NULL"))`
 
+### Alembic 迁移规则
+
+新增或修改数据模型后，必须通过 `alembic revision --autogenerate` 生成迁移文件，作为同一个 commit 的一部分。
+
+- 禁止手写 revision ID — 必须由命令自动生成
+- 禁止只加 Model 不加迁移 — 启动时走 `alembic upgrade head`，缺迁移 = 表不存在 = 启动崩溃
+- 生成后 Review：autogenerate 无法检测列重命名，Partial Unique Index 需确认
+
 ### Docker 镜像架构
 
 所有 Docker 操作必须显式指定 `linux/amd64` 平台。

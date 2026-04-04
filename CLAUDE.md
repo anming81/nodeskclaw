@@ -120,6 +120,7 @@ kubectl get deploy -n <namespace> --context <context-name>
 - **Docker 操作必须指定 `--platform linux/amd64`**（开发机 Apple Silicon arm64，目标集群 amd64）
 - **涉及 K8s/DeskClaw 问题必须用 kubectl 实际查看集群状态**
 - **所有数据删除必须软删除**（设置 `deleted_at`），唯一约束使用 Partial Unique Index
+- **新增/修改 Model 必须同步生成 Alembic 迁移**（`uv run alembic revision --autogenerate`），禁止手写 revision ID
 - **JSONC 配置文件解析前必须剥离行注释**
 - **NFS 路径需正确转换**（容器路径 ↔ 本地挂载路径）
 - **修改代码后必须搜索同源逻辑副本并同步修改**
