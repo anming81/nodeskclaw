@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Coroutine, Literal, Optional
+from typing import Coroutine, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
@@ -1765,7 +1765,7 @@ class BatchUpgradeRequest(BaseModel):
     runtime: str
     image_version: str
     dry_run: bool = False
-    with_repair: Optional[bool] = None
+    with_repair: bool | None = None
 
 
 @router.post("/maintenance/batch-upgrade-instances")

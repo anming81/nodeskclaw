@@ -7,6 +7,7 @@ is a single exec call to the target Pod — no temp dirs, no tar, no bulk sync.
 import base64
 import json
 import logging
+import pathlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -314,7 +315,7 @@ class DockerFS:
         import os
         os.makedirs(str(self._base), exist_ok=True)
 
-    def _resolve(self, remote_path: str) -> "pathlib.Path":
+    def _resolve(self, remote_path: str) -> pathlib.Path:
         abs_slash = self._abs_prefix + "/"
         if remote_path.startswith(abs_slash):
             rel = remote_path[len(abs_slash):]

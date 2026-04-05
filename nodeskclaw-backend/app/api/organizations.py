@@ -3,8 +3,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-
-logger = logging.getLogger(__name__)
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +34,7 @@ from app.schemas.organization import (
 )
 from app.services import auth_service, org_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 

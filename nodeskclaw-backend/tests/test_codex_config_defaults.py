@@ -33,7 +33,13 @@ def test_ensure_gateway_config_sets_local_mode():
 
     _ensure_gateway_config(config, SimpleNamespace(proxy_token="test-token"))
 
-    assert config["gateway"]["mode"] == "local"
+    assert config["gateway"]["auth"]["token"] == "test-token"
+    assert config["gateway"]["auth"]["rateLimit"] == {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000,
+    }
+    assert config["gateway"]["controlUi"]["dangerouslyDisableDeviceAuth"] is True
 
 
 def test_docker_rewrite_urls_uses_external_proxy_url(monkeypatch):

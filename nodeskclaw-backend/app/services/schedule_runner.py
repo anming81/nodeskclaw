@@ -54,7 +54,7 @@ class ScheduleRunner:
         async with self._session_factory() as db:
             result = await db.execute(
                 select(WorkspaceSchedule).where(
-                    WorkspaceSchedule.is_active == True,
+                    WorkspaceSchedule.is_active,
                     WorkspaceSchedule.deleted_at.is_(None),
                 )
             )

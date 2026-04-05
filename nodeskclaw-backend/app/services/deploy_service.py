@@ -1325,11 +1325,11 @@ async def rebuild_instance(
     if org_id and instance.org_id != org_id:
         raise NotFoundError("实例不存在", message_key="errors.instance.not_found")
 
-    _TRANSITIONAL = {
+    transitional_statuses = {
         InstanceStatus.deploying, InstanceStatus.updating,
         InstanceStatus.rebuilding, InstanceStatus.restoring, InstanceStatus.deleting,
     }
-    if instance.status in _TRANSITIONAL:
+    if instance.status in transitional_statuses:
         raise ConflictError(
             message=f"实例正在 {instance.status.value}，请等待完成后再操作",
             message_key="errors.instance.in_transitional_state",
