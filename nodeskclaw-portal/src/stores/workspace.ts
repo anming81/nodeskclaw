@@ -71,6 +71,8 @@ export interface TaskInfo {
   estimated_value: number | null
   actual_value: number | null
   token_cost: number | null
+  prompt_token_cost: number | null
+  completion_token_cost: number | null
   blocker_reason: string | null
   completed_at: string | null
   archived_at: string | null
