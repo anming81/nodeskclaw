@@ -2,17 +2,19 @@
 import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useOrgStore } from '@/stores/org'
-import { Settings, Loader2, KeyRound, Check, X } from 'lucide-vue-next'
+import { Settings, Loader2, KeyRound, Check, X, Save } from 'lucide-vue-next'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { resolveApiErrorMessage } from '@/i18n/error'
-import { PROVIDERS, PROVIDER_LABELS } from '@/utils/llmProviders'
+import { PROVIDERS, PROVIDER_LABELS, WP_PROVIDERS } from '@/utils/llmProviders'
+import { useEdition } from '@/composables/useFeature'
 
 const { t } = useI18n()
 const orgStore = useOrgStore()
 const toast = useToast()
 const { confirm } = useConfirm()
+const { isEE } = useEdition()
 
 const orgId = computed(() => orgStore.currentOrgId)
 
@@ -26,11 +28,21 @@ interface ModelProvider {
   org_token_limit: number | null
   system_token_limit: number | null
   is_active: boolean
+  allowed_models?: string[] | null
   usage_total_tokens: number
   created_by: string
 }
 
+interface WpModelInfo {
+  id: string
+  name: string
+}
+
 const NON_CODEX_PROVIDERS = PROVIDERS.filter(p => p !== 'codex')
+const visibleProviders = computed(() =>
+  isEE.value ? NON_CODEX_PROVIDERS.filter(p => !WP_PROVIDERS.has(p)) : NON_CODEX_PROVIDERS,
+)
+const WP_PROVIDER_LIST = [...WP_PROVIDERS]
 
 const providers = ref<ModelProvider[]>([])
 const loading = ref(true)
@@ -71,6 +83,70 @@ async function fetchProviders() {
     toast.error(resolveApiErrorMessage(e))
   } finally {
     loading.value = false
+  }
+}
+
+const wpModels = ref<Record<string, WpModelInfo[]>>({})
+const wpSelectedModels = ref<Record<string, Set<string>>>({})
+const wpSaving = ref<Record<string, boolean>>({})
+
+const wpConfiguredProviders = computed(() => {
+  const map = configuredMap()
+  return WP_PROVIDER_LIST.filter(p => !!map[p])
+})
+
+function initWpSelections() {
+  const map = configuredMap()
+  for (const p of WP_PROVIDER_LIST) {
+    const configured = map[p]
+    if (configured?.allowed_models?.length) {
+      wpSelectedModels.value[p] = new Set(configured.allowed_models)
+    }
+  }
+}
+
+async function fetchWpModels(provider: string) {
+  if (!orgId.value) return
+  try {
+    const res = await api.get(`/llm/providers/${provider}/models`, {
+      params: { org_id: orgId.value },
+    })
+    wpModels.value[provider] = res.data.data?.models ?? []
+  } catch {
+    wpModels.value[provider] = []
+  }
+}
+
+function toggleWpModel(provider: string, modelId: string) {
+  if (!wpSelectedModels.value[provider]) {
+    wpSelectedModels.value[provider] = new Set()
+  }
+  const s = wpSelectedModels.value[provider]
+  if (s.has(modelId)) {
+    s.delete(modelId)
+  } else {
+    s.add(modelId)
+  }
+}
+
+async function saveAllowedModels(provider: string) {
+  const map = configuredMap()
+  const configured = map[provider]
+  if (!configured || !orgId.value) return
+  wpSaving.value[provider] = true
+  try {
+    const selected = wpSelectedModels.value[provider]
+    const allowed = selected?.size ? [...selected] : null
+    await api.patch(`/orgs/${orgId.value}/model-providers/${configured.id}`, {
+      allowed_models: allowed,
+    })
+    toast.success(t('orgSettings.wpModelsSaved'))
+    await fetchProviders()
+    initWpSelections()
+  } catch (e: any) {
+    toast.error(resolveApiErrorMessage(e) || t('orgSettings.wpModelsSaveFailed'))
+  } finally {
+    wpSaving.value[provider] = false
   }
 }
 
@@ -162,27 +238,109 @@ const canSave = computed(() => {
   return !!form.value.api_key
 })
 
-onMounted(fetchProviders)
+onMounted(async () => {
+  await fetchProviders()
+  if (isEE.value) {
+    initWpSelections()
+    await Promise.all(wpConfiguredProviders.value.map(p => fetchWpModels(p)))
+  }
+})
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div>
-      <h2 class="text-lg font-semibold flex items-center gap-2">
-        <KeyRound class="w-5 h-5" />
-        {{ t('orgSettings.llmKeysTitle') }}
-      </h2>
-      <p class="text-sm text-muted-foreground mt-1">{{ t('orgSettings.llmKeysDescription') }}</p>
+  <div class="space-y-8">
+    <!-- Working Plan section (EE only) -->
+    <div v-if="isEE" class="space-y-4">
+      <div>
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          {{ t('orgSettings.wpTitle') }}
+        </h2>
+        <p class="text-sm text-muted-foreground mt-1">{{ t('orgSettings.wpDescription') }}</p>
+      </div>
+
+      <div v-if="loading" class="flex items-center justify-center py-8">
+        <Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="wp in WP_PROVIDER_LIST"
+          :key="wp"
+          class="rounded-lg border border-border bg-card p-4"
+        >
+          <div class="flex items-center justify-between mb-3">
+            <span class="font-medium text-sm">{{ PROVIDER_LABELS[wp] || wp }}</span>
+            <span
+              v-if="configuredMap()[wp]"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-green-500/10 text-green-500"
+            >
+              <Check class="w-3 h-3" />
+              {{ t('orgSettings.llmKeysConfigured') }}
+            </span>
+            <span v-else class="text-xs text-muted-foreground">
+              {{ t('orgSettings.llmKeysNotConfigured') }}
+            </span>
+          </div>
+
+          <template v-if="configuredMap()[wp]">
+            <div v-if="wpModels[wp]?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+              <label
+                v-for="model in wpModels[wp]"
+                :key="model.id"
+                class="flex items-center gap-2 px-3 py-2 rounded-md border border-border hover:bg-muted/50 transition-colors cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
+                  :checked="wpSelectedModels[wp]?.has(model.id)"
+                  class="accent-primary"
+                  @change="toggleWpModel(wp, model.id)"
+                />
+                {{ model.name }}
+              </label>
+            </div>
+            <div v-else class="flex items-center justify-center py-4">
+              <Loader2 class="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+            <div class="flex justify-end">
+              <button
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="wpSaving[wp]"
+                @click="saveAllowedModels(wp)"
+              >
+                <Loader2 v-if="wpSaving[wp]" class="w-3.5 h-3.5 animate-spin" />
+                <Save v-else class="w-3.5 h-3.5" />
+                {{ t('common.save') }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <p class="text-xs text-muted-foreground/60">{{ t('orgSettings.wpNotConfigured') }}</p>
+          </template>
+        </div>
+      </div>
     </div>
 
-    <div v-if="loading" class="flex items-center justify-center py-12">
-      <Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
-    </div>
+    <!-- CE Model Providers section -->
+    <div class="space-y-4">
+      <div>
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <KeyRound class="w-5 h-5" />
+          {{ t('orgSettings.llmKeysTitle') }}
+        </h2>
+        <p class="text-sm text-muted-foreground mt-1">
+          {{ isEE ? t('orgSettings.llmKeysCeDescription') : t('orgSettings.llmKeysDescription') }}
+        </p>
+      </div>
 
-    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div
-        v-for="providerName in NON_CODEX_PROVIDERS"
-        :key="providerName"
+      <div v-if="loading" class="flex items-center justify-center py-12">
+        <Loader2 class="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+
+      <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          v-for="providerName in visibleProviders"
+          :key="providerName"
         class="rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-colors"
       >
         <div class="flex items-center justify-between mb-3">
@@ -241,6 +399,7 @@ onMounted(fetchProviders)
           </button>
         </template>
       </div>
+    </div>
     </div>
 
     <Teleport to="body">
