@@ -362,6 +362,12 @@ async function handleSave() {
 watch(() => instanceId.value, (val) => {
   if (val) loadAll()
 }, { immediate: true })
+
+watch(() => instanceOrgId.value, (newVal, oldVal) => {
+  if (newVal && !oldVal && instanceId.value) {
+    loadAll()
+  }
+})
 </script>
 
 <template>
@@ -517,7 +523,7 @@ watch(() => instanceId.value, (val) => {
                   </label>
                   <span
                     v-if="!isOrgKeyAvailable(cfg.provider)"
-                    class="pointer-events-none absolute z-50 top-full left-1/2 -translate-x-1/2 mt-1.5 whitespace-nowrap rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border border-border invisible group-hover:visible"
+                    class="pointer-events-none absolute z-50 top-full left-0 mt-1.5 whitespace-nowrap rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border border-border invisible group-hover:visible"
                   >
                     {{ t('llm.orgKeyNotConfigured') }}
                   </span>
