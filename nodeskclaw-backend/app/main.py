@@ -884,12 +884,6 @@ from app.core.feature_gate import feature_gate  # noqa: E402
 
 if feature_gate.is_ee:
     _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    _ee_backend_dir = os.path.join(_project_root, "ee", "backend")
-    if not os.path.isdir(_ee_backend_dir):
-        raise RuntimeError(
-            f"NODESKCLAW_EDITION=ee 但 ee/backend/ 目录不存在 ({_ee_backend_dir})。"
-            "请确保镜像构建时包含了 EE 代码（deploy/cli.sh deploy backend --ee）。"
-        )
     if _project_root not in sys.path:
         sys.path.insert(0, _project_root)
     try:
