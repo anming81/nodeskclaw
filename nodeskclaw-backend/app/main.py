@@ -472,6 +472,10 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning("预热集群 %s 失败: %s", cluster.name, e)
 
+    # ── 补建缺失的 proxy Ingress（按 proxy_endpoint 配置，不限 CE/EE）──
+    from app.startup.proxy_reconcile import reconcile_proxy_ingresses
+    await reconcile_proxy_ingresses(async_session_factory)
+
     # ── 恢复卡在 deploying 状态的实例 ─────────────────
     # 后端重启（如 --reload）会杀死 asyncio.create_task 部署管道，
     # 实例可能永远卡在 deploying。启动时从 K8s 同步真实状态。
@@ -880,6 +884,12 @@ from app.core.feature_gate import feature_gate  # noqa: E402
 
 if feature_gate.is_ee:
     _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    _ee_backend_dir = os.path.join(_project_root, "ee", "backend")
+    if not os.path.isdir(_ee_backend_dir):
+        raise RuntimeError(
+            f"NODESKCLAW_EDITION=ee 但 ee/backend/ 目录不存在 ({_ee_backend_dir})。"
+            "请确保镜像构建时包含了 EE 代码（deploy/cli.sh deploy backend --ee）。"
+        )
     if _project_root not in sys.path:
         sys.path.insert(0, _project_root)
     try:
@@ -904,8 +914,9 @@ if feature_gate.is_ee:
             pass
 
         logging.getLogger(__name__).info("EE 模块已加载（含操作审计）")
-    except ImportError:
-        logging.getLogger(__name__).warning("检测到 ee/ 目录但 EE 模块加载失败，以 CE 模式运行")
+    except Exception:
+        logging.getLogger(__name__).exception("EE 模块加载失败，无法以 CE 模式降级运行")
+        raise
 
 if not feature_gate.is_ee:
     from app.services.audit_handler import register_ce_audit_handler
