@@ -1608,6 +1608,9 @@ const zhCN = {
       ingress_base_domain_hint: "此配置需要组织管理员完成。",
       ingress_base_domain_go_configure: "前往网络路由配置",
     },
+    workspace_deploy: {
+      not_found: "部署记录不存在",
+    },
     storage: {
       not_configured: "文件存储服务未配置",
       presign_failed: "生成文件下载链接失败，请稍后重试",

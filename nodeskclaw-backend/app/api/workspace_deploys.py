@@ -26,6 +26,13 @@ def _ok(data=None, message: str = "success"):
     return {"code": 0, "message": message, "data": data}
 
 
+def _error(status_code: int, error_code: int, message_key: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"error_code": error_code, "message_key": message_key, "message": message},
+    )
+
+
 @router.get("/deploys/active")
 async def list_active_deploys(
     org_ctx=Depends(get_current_org),
@@ -85,7 +92,7 @@ async def get_workspace_deploy(
     )
     row = r.first()
     if not row:
-        raise HTTPException(status_code=404, detail="部署记录不存在")
+        raise _error(404, 40461, "errors.workspace_deploy.not_found", "部署记录不存在")
     wd, ws_name = row
     return _ok({
         "id": wd.id,
@@ -119,7 +126,7 @@ async def workspace_deploy_progress_stream(
         )
     )
     if not r.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="部署记录不存在")
+        raise _error(404, 40461, "errors.workspace_deploy.not_found", "部署记录不存在")
 
     async def generate():
         async for ev in event_bus.subscribe("workspace_deploy_progress"):
