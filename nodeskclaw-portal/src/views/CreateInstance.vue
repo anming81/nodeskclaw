@@ -160,11 +160,31 @@ function addCustomProvider() {
   showCustomForm.value = false
 }
 
+function addOrgCustomProvider(orgProvider: any) {
+  llmConfigs.value.push({
+    provider: orgProvider.provider,
+    keySource: 'org',
+    personalKey: '',
+    baseUrl: orgProvider.base_url || '',
+    apiType: orgProvider.api_type || 'openai-completions',
+    isCustom: true,
+    showBaseUrl: true,
+    selectedModel: null,
+  })
+}
+
 const orgKeyProviders = ref<Set<string>>(new Set())
 const orgAllowedModels = ref<Record<string, string[] | null>>({})
+const orgProviderDetails = ref<Record<string, any>>({})
 
 const isOrgKeyAvailable = (provider: string) =>
   orgKeyProviders.value.has(provider)
+
+const orgCustomProviders = computed(() =>
+  Object.values(orgProviderDetails.value)
+    .filter((p: any) => !ALL_KNOWN_PROVIDERS.has(p.provider))
+    .filter((p: any) => !llmConfigs.value.some(c => c.provider === p.provider)),
+)
 
 const orgKeyLabel = computed(() => isEE.value ? 'Working Plan' : t('llm.teamKey'))
 
@@ -377,6 +397,7 @@ onMounted(async () => {
       orgKeyProviders.value = new Set(keys.map((k: any) => k.provider))
       for (const k of keys) {
         orgAllowedModels.value[k.provider] = k.allowed_models ?? null
+        orgProviderDetails.value[k.provider] = k
       }
     }
     engines.value = (enginesRes.data.data ?? []) as EngineItem[]
@@ -895,18 +916,23 @@ async function handleDeploy() {
               <!-- API type selector (custom only) -->
               <div v-if="cfg.isCustom" class="flex gap-4 text-sm">
                 <label class="text-xs text-muted-foreground">{{ t('llm.apiType') }}:</label>
-                <label class="flex items-center gap-1.5 cursor-pointer text-xs">
-                  <input type="radio" :name="`apitype-${cfg.provider}`" value="openai-completions" v-model="cfg.apiType" class="accent-primary" />
-                  {{ t('llm.apiTypeOpenai') }}
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer text-xs">
-                  <input type="radio" :name="`apitype-${cfg.provider}`" value="anthropic-messages" v-model="cfg.apiType" class="accent-primary" />
-                  {{ t('llm.apiTypeAnthropic') }}
-                </label>
+                <template v-if="cfg.keySource === 'org'">
+                  <span class="text-xs">{{ cfg.apiType === 'anthropic-messages' ? t('llm.apiTypeAnthropic') : t('llm.apiTypeOpenai') }}</span>
+                </template>
+                <template v-else>
+                  <label class="flex items-center gap-1.5 cursor-pointer text-xs">
+                    <input type="radio" :name="`apitype-${cfg.provider}`" value="openai-completions" v-model="cfg.apiType" class="accent-primary" />
+                    {{ t('llm.apiTypeOpenai') }}
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer text-xs">
+                    <input type="radio" :name="`apitype-${cfg.provider}`" value="anthropic-messages" v-model="cfg.apiType" class="accent-primary" />
+                    {{ t('llm.apiTypeAnthropic') }}
+                  </label>
+                </template>
               </div>
 
               <div class="space-y-2">
-                <div v-if="!cfg.isCustom && !isCodexProvider(cfg.provider)" class="flex gap-4 text-sm">
+                <div v-if="(!cfg.isCustom || isOrgKeyAvailable(cfg.provider)) && !isCodexProvider(cfg.provider)" class="flex gap-4 text-sm">
                   <span class="relative group">
                     <label
                       class="flex items-center gap-1.5"
@@ -932,7 +958,7 @@ async function handleDeploy() {
                   {{ t('llm.codexCliHint') }}
                 </p>
 
-                <p v-if="!cfg.isCustom && cfg.keySource === 'org'" class="text-xs text-muted-foreground pl-0.5">
+                <p v-if="cfg.keySource === 'org' && (!cfg.isCustom || isOrgKeyAvailable(cfg.provider))" class="text-xs text-muted-foreground pl-0.5">
                   {{ t('llm.orgKeyHint') }}
                 </p>
 
@@ -1005,6 +1031,20 @@ async function handleDeploy() {
                   <div class="flex items-center gap-1.5">
                     {{ PROVIDER_LABELS[p] || p }}
                     <span v-if="orgKeyProviders.has(p)" class="inline-flex items-center gap-0.5 text-[10px] text-amber-500">
+                      <Star class="w-3 h-3 fill-amber-500 text-amber-500" />
+                      {{ orgKeyLabel }}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  v-for="ocp in orgCustomProviders"
+                  :key="ocp.provider"
+                  class="px-4 py-3 rounded-lg border border-border bg-card text-sm text-left hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                  @click="addOrgCustomProvider(ocp)"
+                >
+                  <div class="flex items-center gap-1.5">
+                    {{ ocp.label || ocp.provider }}
+                    <span class="inline-flex items-center gap-0.5 text-[10px] text-amber-500">
                       <Star class="w-3 h-3 fill-amber-500 text-amber-500" />
                       {{ orgKeyLabel }}
                     </span>
