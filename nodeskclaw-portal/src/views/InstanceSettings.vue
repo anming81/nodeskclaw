@@ -613,7 +613,7 @@ watch(() => instanceOrgId.value, (newVal, oldVal) => {
             <ModelSelect
               :provider="cfg.provider"
               v-model="cfg.selectedModel"
-              :allow-manual-input="!!cfg.isCustom"
+              allow-manual-input
               @fetch-models="handleFetchModels"
               @update:model-value="markDirty"
             />

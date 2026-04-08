@@ -1,6 +1,7 @@
 """Fetch available models from LLM provider APIs with in-memory caching."""
 
 import hashlib
+import json
 import logging
 import time
 
@@ -89,6 +90,9 @@ async def fetch_provider_models(
     except httpx.TimeoutException:
         logger.error("拉取 %s 模型列表超时", provider)
         raise ValueError("请求超时，请稍后重试")
+    except json.JSONDecodeError as e:
+        logger.error("拉取 %s 模型列表失败: 响应非 JSON (base_url=%s): %s", provider, base_url, e)
+        raise ValueError("模型列表接口返回了无效响应，该 API 地址可能不支持自动获取模型列表") from e
     except Exception as e:
         logger.error("拉取 %s 模型列表失败: %s", provider, e)
         raise ValueError(f"拉取模型列表失败: {e}") from e

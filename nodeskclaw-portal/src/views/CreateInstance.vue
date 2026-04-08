@@ -982,7 +982,7 @@ async function handleDeploy() {
               <ModelSelect
                 :provider="cfg.provider"
                 v-model="cfg.selectedModel"
-                :allow-manual-input="!!cfg.isCustom"
+                allow-manual-input
                 @fetch-models="handleFetchModels"
               />
               <p v-if="(cfg.isCustom || isCodexProvider(cfg.provider) || !BUILTIN_PROVIDERS.has(cfg.provider)) && !cfg.selectedModel" class="text-[10px] text-amber-500">
