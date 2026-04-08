@@ -83,6 +83,7 @@ async function handleBackup() {
   try {
     await api.post(`/instances/${instanceId.value}/backups`)
     toast.success(t('backup.backupSuccess'))
+    router.push({ name: 'InstanceBackups', params: { id: instanceId.value } })
   } catch (e: any) {
     toast.error(e?.response?.data?.message || t('common.failed'))
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, computed, onMounted } from 'vue'
+import { ref, inject, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Archive, RotateCcw, Trash2, Loader2, Plus, RefreshCw } from 'lucide-vue-next'
@@ -25,20 +25,73 @@ interface Backup {
   completed_at: string | null
 }
 
+const TERMINAL_STATUSES = new Set(['completed', 'failed'])
+
 const backups = ref<Backup[]>([])
 const loading = ref(false)
 const creating = ref(false)
+let pollTimer: ReturnType<typeof setInterval> | null = null
+const polling = ref(false)
+const previousStatuses = new Map<string, string>()
+
+function syncPreviousStatuses() {
+  previousStatuses.clear()
+  for (const b of backups.value) {
+    previousStatuses.set(b.id, b.status)
+  }
+}
+
+function hasActiveBackups(): boolean {
+  return backups.value.some(b => !TERMINAL_STATUSES.has(b.status))
+}
 
 async function fetchBackups() {
   loading.value = true
   try {
     const { data } = await api.get(`/instances/${instanceId.value}/backups`)
     backups.value = data.data ?? []
+    syncPreviousStatuses()
   } catch {
     backups.value = []
   } finally {
     loading.value = false
   }
+}
+
+async function pollBackups() {
+  try {
+    const { data } = await api.get(`/instances/${instanceId.value}/backups`)
+    const newList: Backup[] = data.data ?? []
+
+    for (const b of newList) {
+      const prev = previousStatuses.get(b.id)
+      if (prev && !TERMINAL_STATUSES.has(prev) && TERMINAL_STATUSES.has(b.status)) {
+        if (b.status === 'completed') {
+          toast.success(t('backup.backupCompleted', { duration: formatDuration(b.created_at, b.completed_at) }))
+        } else if (b.status === 'failed') {
+          toast.error(t('backup.backupFailed', { message: b.message || t('common.failed') }))
+        }
+      }
+    }
+
+    backups.value = newList
+    syncPreviousStatuses()
+
+    if (!hasActiveBackups()) stopPolling()
+  } catch {
+    // preserve existing list on network error
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return
+  polling.value = true
+  pollTimer = setInterval(pollBackups, 3000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  polling.value = false
 }
 
 async function handleCreate() {
@@ -47,6 +100,7 @@ async function handleCreate() {
     await api.post(`/instances/${instanceId.value}/backups`)
     toast.success(t('backup.backupSuccess'))
     await fetchBackups()
+    startPolling()
   } catch (e: any) {
     toast.error(e?.response?.data?.message || t('common.failed'))
   } finally {
@@ -100,12 +154,28 @@ function formatTime(iso: string | null): string {
   return new Date(iso).toLocaleString()
 }
 
-function statusLabel(status: string): string {
-  const key = `backup.status_${status}`
-  return t(key)
+function formatDuration(start: string | null, end: string | null): string {
+  if (!start || !end) return '-'
+  const seconds = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000)
+  if (seconds < 0) return '-'
+  if (seconds < 60) return t('backup.durationSeconds', { count: seconds })
+  const min = Math.floor(seconds / 60)
+  const sec = seconds % 60
+  return t('backup.durationMinutes', { min, sec })
 }
 
-onMounted(fetchBackups)
+function statusLabel(status: string): string {
+  return t(`backup.status_${status}`)
+}
+
+onMounted(async () => {
+  await fetchBackups()
+  if (hasActiveBackups()) startPolling()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <template>
@@ -117,7 +187,7 @@ onMounted(fetchBackups)
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm hover:bg-card transition-colors"
           @click="fetchBackups"
         >
-          <RefreshCw class="w-4 h-4" />
+          <RefreshCw class="w-4 h-4" :class="polling ? 'animate-spin' : ''" />
         </button>
         <button
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -146,7 +216,8 @@ onMounted(fetchBackups)
           <tr class="border-b border-border bg-muted/30">
             <th class="text-left px-4 py-2.5 font-medium">{{ t('backup.createdAt') }}</th>
             <th class="text-left px-4 py-2.5 font-medium">{{ t('backup.size') }}</th>
-            <th class="text-left px-4 py-2.5 font-medium">{{ t('status.pending') }}</th>
+            <th class="text-left px-4 py-2.5 font-medium">{{ t('backup.duration') }}</th>
+            <th class="text-left px-4 py-2.5 font-medium">{{ t('backup.status') }}</th>
             <th class="text-right px-4 py-2.5 font-medium"></th>
           </tr>
         </thead>
@@ -157,15 +228,20 @@ onMounted(fetchBackups)
           >
             <td class="px-4 py-2.5">{{ formatTime(b.created_at) }}</td>
             <td class="px-4 py-2.5">{{ formatSize(b.data_size) }}</td>
+            <td class="px-4 py-2.5">{{ formatDuration(b.created_at, b.completed_at) }}</td>
             <td class="px-4 py-2.5">
               <span
+                class="inline-flex items-center gap-1"
                 :class="{
                   'text-green-400': b.status === 'completed',
                   'text-yellow-400': b.status === 'in_progress' || b.status === 'pending',
                   'text-red-400': b.status === 'failed',
                 }"
-              >{{ statusLabel(b.status) }}</span>
-              <span v-if="b.message" class="ml-2 text-muted-foreground text-xs">{{ b.message }}</span>
+              >
+                <Loader2 v-if="b.status === 'pending' || b.status === 'in_progress'" class="w-3.5 h-3.5 animate-spin" />
+                {{ statusLabel(b.status) }}
+              </span>
+              <span v-if="b.message && b.status === 'failed'" class="ml-2 text-muted-foreground text-xs">{{ b.message }}</span>
             </td>
             <td class="px-4 py-2.5 text-right">
               <div class="flex items-center justify-end gap-2">
