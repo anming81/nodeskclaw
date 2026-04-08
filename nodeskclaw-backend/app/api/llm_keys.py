@@ -404,6 +404,8 @@ async def list_provider_models(
         org_key = result.scalar_one_or_none()
         if org_key:
             resolved_key = org_key.api_key
+            if not resolved_base_url:
+                resolved_base_url = org_key.base_url
 
     if not resolved_key:
         raise BadRequestError(

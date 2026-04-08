@@ -65,14 +65,15 @@ async def fetch_provider_models(
     if cached is not None:
         return cached
 
-    fetcher = _FETCHERS.get(provider)
-    if not fetcher and base_url:
+    if base_url:
         _url = base_url
 
         async def _custom_fetcher(key: str) -> list[ModelInfo]:
             return await _fetch_openai_compatible(key, _url)
 
         fetcher = _custom_fetcher
+    else:
+        fetcher = _FETCHERS.get(provider)
     if not fetcher:
         logger.warning("不支持的 provider: %s", provider)
         return []
