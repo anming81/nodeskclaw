@@ -32,17 +32,17 @@ PROVIDER_BASE_URLS: dict[str, str] = {
 }
 
 PROVIDER_API_TYPE: dict[str, str] = {
+    "openai": "openai-completions",
+    "anthropic": "anthropic-messages",
     "gemini": "google-generative-ai",
+    "openrouter": "openai-completions",
     "minimax-openai": "openai-completions",
     "minimax-anthropic": "anthropic-messages",
 }
 
 
-_ANTHROPIC_PROVIDERS = {"anthropic", "minimax-anthropic"}
-
-
 def _infer_api_type(provider: str) -> str:
-    return "anthropic-messages" if provider in _ANTHROPIC_PROVIDERS else "openai-completions"
+    return PROVIDER_API_TYPE.get(provider, "openai-completions")
 
 
 def _cache_key(provider: str, api_key: str) -> str:
