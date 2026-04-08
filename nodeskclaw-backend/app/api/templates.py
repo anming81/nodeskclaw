@@ -67,6 +67,33 @@ class TemplateDeployRequest(BaseModel):
     excluded_corridor_coords: list[list[int]] | None = None
 
 
+async def _get_template_with_access(
+    template_id: str,
+    org_id: str,
+    db: AsyncSession,
+    *,
+    require_owner: bool = False,
+) -> WorkspaceTemplate:
+    result = await db.execute(
+        select(WorkspaceTemplate).where(
+            WorkspaceTemplate.id == template_id,
+            not_deleted(WorkspaceTemplate),
+        )
+    )
+    template = result.scalar_one_or_none()
+    if template is None:
+        raise _error(404, 40450, "errors.template.not_found", "模板不存在")
+
+    if require_owner:
+        if template.org_id != org_id:
+            raise _error(403, 40350, "errors.template.access_denied", "无权使用该模板")
+        return template
+
+    if template.visibility == "org_private" and template.org_id != org_id:
+        raise _error(403, 40350, "errors.template.access_denied", "无权使用该模板")
+    return template
+
+
 def _row_summary(t: WorkspaceTemplate) -> dict:
     specs = t.agent_specs or []
     hs = t.human_specs or []
@@ -326,17 +353,7 @@ async def deploy_from_template(
 ):
     user, org = org_ctx
     org_id = _org_id(org)
-    result = await db.execute(
-        select(WorkspaceTemplate).where(
-            WorkspaceTemplate.id == template_id,
-            not_deleted(WorkspaceTemplate),
-        )
-    )
-    t = result.scalar_one_or_none()
-    if t is None:
-        raise _error(404, 40450, "errors.template.not_found", "模板不存在")
-    if t.visibility == "org_private" and t.org_id != org_id:
-        raise _error(403, 40350, "errors.template.access_denied", "无权使用该模板")
+    t = await _get_template_with_access(template_id, org_id, db)
     try:
         out = await start_workspace_template_deploy(
             db,
@@ -359,15 +376,8 @@ async def get_template(
     org_ctx=Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(WorkspaceTemplate).where(
-            WorkspaceTemplate.id == template_id,
-            not_deleted(WorkspaceTemplate),
-        )
-    )
-    t = result.scalar_one_or_none()
-    if t is None:
-        raise _error(404, 40450, "errors.template.not_found", "模板不存在")
+    _user, org = org_ctx
+    t = await _get_template_with_access(template_id, _org_id(org), db)
     summ = template_summary_from_specs(t.agent_specs or [], t.human_specs or [])
     return _ok(
         {
@@ -398,15 +408,8 @@ async def delete_template(
     org_ctx=Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(WorkspaceTemplate).where(
-            WorkspaceTemplate.id == template_id,
-            not_deleted(WorkspaceTemplate),
-        )
-    )
-    t = result.scalar_one_or_none()
-    if t is None:
-        raise _error(404, 40450, "errors.template.not_found", "模板不存在")
+    _user, org = org_ctx
+    t = await _get_template_with_access(template_id, _org_id(org), db, require_owner=True)
     if t.is_preset:
         raise _error(400, 40050, "errors.template.cannot_delete_preset", "预设模板不可删除")
     t.soft_delete()
@@ -423,16 +426,7 @@ async def apply_template(
 ):
     user, org = org_ctx
     await _check_workspace(body.target_workspace_id, org, db)
-
-    result = await db.execute(
-        select(WorkspaceTemplate).where(
-            WorkspaceTemplate.id == template_id,
-            not_deleted(WorkspaceTemplate),
-        )
-    )
-    t = result.scalar_one_or_none()
-    if t is None:
-        raise _error(404, 40450, "errors.template.not_found", "模板不存在")
+    t = await _get_template_with_access(template_id, _org_id(org), db)
 
     ws_id = body.target_workspace_id
     topo = t.topology_snapshot or {}
