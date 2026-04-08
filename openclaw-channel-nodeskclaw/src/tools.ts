@@ -266,6 +266,7 @@ function createTopologyTool(cfg: ToolConfig): AnyAgentTool {
           return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/members`));
         case "get_my_neighbors": {
           const topo = (await apiFetch(cfg, `/workspaces/${ws}/topology`)) as Record<string, unknown>;
+          if (topo.error) return jsonResult(topo);
           const data = topo.data as Record<string, unknown[]> | undefined;
           const nodes = (data?.nodes ?? []) as Record<string, unknown>[];
           const edges = (data?.edges ?? []) as Record<string, unknown>[];
