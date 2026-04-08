@@ -20,7 +20,10 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 from app.services.runtime.messaging.envelope import MessageEnvelope
 from app.services.runtime.transport.base import DeliveryResult
 from app.services.tunnel.protocol import TunnelMessage, TunnelMessageType
-from app.services.workspace_message_service import MAX_COLLABORATION_DEPTH
+from app.services.workspace_message_service import (
+    ABSOLUTE_MAX_COLLABORATION_DEPTH,
+    get_collaboration_depth_limit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -646,9 +649,10 @@ class TunnelAdapter:
             mentions = _extract_mentions(full_response, ws_ctx.members, agent_name)
             if mentions:
                 depth = (data.extensions or {}).get("depth", 0)
-                if depth < MAX_COLLABORATION_DEPTH:
-                    from app.core.deps import async_session_factory
-                    async with async_session_factory() as save_db:
+                from app.core.deps import async_session_factory
+                async with async_session_factory() as save_db:
+                    collab_limit = await get_collaboration_depth_limit(save_db, workspace_id)
+                    if depth < collab_limit:
                         saved_msg = await msg_service.record_message(
                             save_db,
                             workspace_id=workspace_id,
@@ -659,6 +663,7 @@ class TunnelAdapter:
                             message_type="collaboration",
                             depth=depth,
                         )
+                if depth < collab_limit:
                     broadcast_event(workspace_id, "agent:collaboration", {
                         "instance_id": target_node_id,
                         "agent_name": agent_name,
@@ -709,10 +714,11 @@ class TunnelAdapter:
                         transport=self.transport_id,
                         latency_ms=int((time.monotonic() - start) * 1000),
                     )
-                logger.warning(
-                    "Mention routing skipped: depth %d >= %d",
-                    depth, MAX_COLLABORATION_DEPTH,
-                )
+                else:
+                    logger.warning(
+                        "Mention routing skipped: depth %d >= %d",
+                        depth, collab_limit,
+                    )
 
         if full_response and not msg_service.is_no_reply(full_response.strip()):
             broadcast_event(workspace_id, "agent:done", {
@@ -769,10 +775,11 @@ class TunnelAdapter:
         prev_visited = (
             original_envelope.data.routing.visited if original_envelope.data else []
         )
-        if len(prev_visited) >= MAX_COLLABORATION_DEPTH:
+        delegation_limit = await get_collaboration_depth_limit(db, workspace_id)
+        if len(prev_visited) >= delegation_limit:
             logger.warning(
                 "Collaboration depth limit (%d) reached, refusing %s from %s",
-                MAX_COLLABORATION_DEPTH, action, source_node_id,
+                delegation_limit, action, source_node_id,
             )
             return
 
