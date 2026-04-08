@@ -1608,6 +1608,9 @@ const enUS = {
       ingress_base_domain_hint: "This requires organization admin configuration.",
       ingress_base_domain_go_configure: "Go to Network Routing settings",
     },
+    workspace_deploy: {
+      not_found: "Deployment record not found",
+    },
     storage: {
       not_configured: "File storage service is not configured",
       presign_failed: "Failed to generate file download link, please try again later",
