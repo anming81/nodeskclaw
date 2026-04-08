@@ -18,6 +18,7 @@ import { renderMarkdown as renderMd } from '@/utils/markdown'
 import { copyToClipboard } from '@/utils/clipboard'
 import { AgentMention } from './extensions/agentMention'
 import { SlashCommand } from './extensions/slashCommand'
+import { formatTime as formatLocaleTime } from '@/utils/localeFormat'
 
 const props = withDefaults(defineProps<{
   workspaceId: string
@@ -26,7 +27,7 @@ const props = withDefaults(defineProps<{
   canSend: true,
 })
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const store = useWorkspaceStore()
 const authStore = useAuthStore()
 const toast = useToast()
@@ -807,7 +808,7 @@ onMounted(async () => {
 
 function formatTime(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return formatLocaleTime(dateStr, String(locale.value), { hour: '2-digit', minute: '2-digit' })
   } catch {
     return ''
   }

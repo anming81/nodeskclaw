@@ -4,10 +4,11 @@ import { Plus, Pin, MessageSquare, ChevronLeft, ChevronRight, Loader2 } from 'lu
 import { useI18n } from 'vue-i18n'
 import api from '@/services/api'
 import MentionPicker from './MentionPicker.vue'
+import { formatDate, formatTime as formatLocaleTime } from '@/utils/localeFormat'
 
 const props = defineProps<{ workspaceId: string }>()
 const emit = defineEmits<{ (e: 'select', postId: string): void }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 interface PostItem {
   id: string
@@ -71,8 +72,7 @@ watch(total, (t) => { totalPages.value = Math.ceil(t / 20) })
 
 function formatTime(ts: string | null) {
   if (!ts) return ''
-  const d = new Date(ts)
-  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return `${formatDate(ts, String(locale.value))} ${formatLocaleTime(ts, String(locale.value), { hour: '2-digit', minute: '2-digit' })}`
 }
 
 onMounted(fetchPosts)

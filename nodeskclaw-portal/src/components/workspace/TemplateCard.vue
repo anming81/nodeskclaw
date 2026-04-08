@@ -18,11 +18,9 @@ const iconComponent = computed(() => {
   if (!props.template) return LayoutTemplate
   if (props.template.visibility === 'org_private') return Building2
 
-  const nodes = props.template.topology_snapshot?.nodes ?? []
   const agentNames = new Set(
-    nodes
-      .filter((node) => node.node_type === 'agent')
-      .map((node) => node.display_name?.trim())
+    (props.template.agent_names ?? [])
+      .map((name) => name?.trim())
       .filter((name): name is string => Boolean(name)),
   )
 
@@ -35,9 +33,7 @@ const iconComponent = computed(() => {
 
 const agentCount = computed(() => {
   if (props.blank || !props.template) return 0
-  const topo = props.template.topology_snapshot
-  if (!topo?.nodes) return 0
-  return topo.nodes.filter((node) => node.node_type === 'agent').length
+  return props.template.agent_count ?? 0
 })
 </script>
 

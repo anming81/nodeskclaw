@@ -6,8 +6,9 @@ import { Archive, RotateCcw, Trash2, Loader2, Plus, RefreshCw } from 'lucide-vue
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { formatDateTime } from '@/utils/localeFormat'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -151,7 +152,7 @@ function formatSize(bytes: number | null): string {
 
 function formatTime(iso: string | null): string {
   if (!iso) return '-'
-  return new Date(iso).toLocaleString()
+  return formatDateTime(iso, String(locale.value))
 }
 
 function formatDuration(start: string | null, end: string | null): string {

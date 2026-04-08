@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatDateTime, formatNumber, resolveLocale } from './localeFormat'
+import { formatDate, formatDateTime, formatNumber, formatTime, resolveLocale } from './localeFormat'
 
 describe('localeFormat', () => {
   it('normalizes supported locales', () => {
@@ -19,5 +19,13 @@ describe('localeFormat', () => {
     const value = '2026-04-04T12:34:56Z'
     expect(formatDateTime(value, 'en-US')).toContain('2026')
     expect(formatDateTime(value, 'zh-CN')).toContain('2026')
+  })
+
+  it('formats date and time with the requested locale', () => {
+    const value = '2026-04-04T12:34:56Z'
+    expect(formatDate(value, 'en-US')).toContain('2026')
+    expect(formatDate(value, 'zh-CN')).toContain('2026')
+    expect(formatTime(value, 'en-US')).toContain(':')
+    expect(formatTime(value, 'zh-CN')).toContain(':')
   })
 })

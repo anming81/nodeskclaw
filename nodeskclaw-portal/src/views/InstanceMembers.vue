@@ -8,8 +8,9 @@ import { resolveApiErrorMessage } from '@/i18n/error'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import CustomSelect from '@/components/shared/CustomSelect.vue'
+import { formatDate } from '@/utils/localeFormat'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -147,7 +148,7 @@ async function removeMember(member: MemberInfo) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleDateString('zh-CN', {
+  return formatDate(iso, String(locale.value), {
     year: 'numeric', month: '2-digit', day: '2-digit',
   })
 }

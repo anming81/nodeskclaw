@@ -5,10 +5,11 @@ import { useI18n } from 'vue-i18n'
 import api from '@/services/api'
 import { renderMarkdown } from '@/utils/markdown'
 import MentionPicker from './MentionPicker.vue'
+import { formatDate, formatTime as formatLocaleTime } from '@/utils/localeFormat'
 
 const props = defineProps<{ workspaceId: string; postId: string }>()
 const emit = defineEmits<{ (e: 'back'): void }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 interface ReplyItem {
   id: string
@@ -85,8 +86,7 @@ function renderMd(raw: string) {
 }
 
 function formatTime(ts: string) {
-  const d = new Date(ts)
-  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return `${formatDate(ts, String(locale.value))} ${formatLocaleTime(ts, String(locale.value), { hour: '2-digit', minute: '2-digit' })}`
 }
 
 onMounted(fetchPost)

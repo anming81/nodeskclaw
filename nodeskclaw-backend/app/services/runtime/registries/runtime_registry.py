@@ -38,6 +38,7 @@ class RuntimeSpec:
     has_init_script: bool = True
     available: bool = True
     docker_command: tuple[str, ...] | None = None
+    docker_seed_template_rel: str | None = None
     backup_dirs: tuple[str, ...] = ()
     backup_exclude_patterns: tuple[str, ...] = (
         "node_modules", "dist", "__pycache__", ".git", "cache", "*.pyc",
@@ -86,6 +87,7 @@ def _register_builtins() -> None:
         display_powered_by="OpenClaw",
         readiness_probe_path="/readyz",
         order=0,
+        docker_seed_template_rel="openclaw.json.template",
         backup_dirs=(".openclaw", ".deskclaw/tools"),
     ))
     RUNTIME_REGISTRY.register(RuntimeSpec(

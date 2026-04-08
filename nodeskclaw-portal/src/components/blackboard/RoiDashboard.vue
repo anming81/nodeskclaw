@@ -3,12 +3,13 @@ import { ref, onMounted } from 'vue'
 import { BarChart3, RefreshCw, Loader2, TrendingUp, Zap, Target } from 'lucide-vue-next'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useI18n } from 'vue-i18n'
+import { formatNumber as formatLocaleNumber } from '@/utils/localeFormat'
 
 const props = defineProps<{
   workspaceId: string
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = useWorkspaceStore()
 
 const loading = ref(false)
@@ -51,7 +52,7 @@ function formatNumber(val: unknown): string {
   if (val == null) return '-'
   const n = Number(val)
   if (isNaN(n)) return '-'
-  return n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  return formatLocaleNumber(n, String(locale.value), { maximumFractionDigits: 2 })
 }
 
 function formatPercent(val: unknown): string {

@@ -13,6 +13,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import type { InstanceSkillItem, InstanceGeneItem, GenomeItem } from '@/stores/gene'
 import { getRuntimeCaps } from '@/utils/runtimeCapabilities'
 import { copyToClipboard } from '@/utils/clipboard'
+import { formatDate } from '@/utils/localeFormat'
 
 const props = defineProps<{
   visible: boolean
@@ -25,7 +26,7 @@ const emit = defineEmits<{
   deleted: []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const router = useRouter()
 const { confirm } = useConfirm()
@@ -424,7 +425,7 @@ onUnmounted(stopPolling)
                   </div>
                   <div>
                     <span class="text-muted-foreground text-xs">{{ t('agentDetailDialog.createdAt') }}</span>
-                    <span class="ml-1.5 text-xs">{{ new Date(instance.created_at).toLocaleDateString('zh-CN') }}</span>
+                    <span class="ml-1.5 text-xs">{{ formatDate(instance.created_at, String(locale)) }}</span>
                   </div>
                 </div>
               </div>
