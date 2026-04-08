@@ -107,7 +107,7 @@ def _build_providers_config(
             if not proxy_url:
                 logger.error("LLM_PROXY_URL 未配置，Working Plan 模式无法生成 proxy URL")
                 continue
-            api_type = PROVIDER_API_TYPE.get(provider)
+            api_type = cfg_api_type or PROVIDER_API_TYPE.get(provider)
             skip_v1 = api_type in ("anthropic-messages", "google-generative-ai")
             entry = {
                 "baseUrl": f"{proxy_url}/{provider}" if skip_v1 else f"{proxy_url}/{provider}/v1",
