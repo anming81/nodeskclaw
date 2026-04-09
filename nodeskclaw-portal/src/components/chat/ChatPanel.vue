@@ -974,7 +974,7 @@ function updateSuggestionIndex(state: SuggestionState, idx: number) {
                 v-if="msg.message_type === 'collaboration'"
                 class="text-[10px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 shrink-0"
               >
-                collaboration
+                {{ t('chat.collaborationTag') }}
               </span>
               <span
                 v-if="msg.intent"

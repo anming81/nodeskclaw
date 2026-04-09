@@ -681,6 +681,7 @@ const enUS = {
     searchTo: "End time",
     searchFailed: "Search failed: {error}",
     slugCopied: "AI Employee slug copied",
+    collaborationTag: "Collaboration",
     cmdStatusLabel: "Show all AI Employee statuses",
     cmdClearLabel: "Clear chat history",
     cmdRestartLabel: "Restart AI Employee",

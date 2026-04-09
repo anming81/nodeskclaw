@@ -681,6 +681,7 @@ const zhCN = {
     searchTo: "结束时间",
     searchFailed: "搜索失败：{error}",
     slugCopied: "AI 员工标识已复制",
+    collaborationTag: "协作消息",
     cmdStatusLabel: "显示所有 AI 员工状态",
     cmdClearLabel: "清空聊天记录",
     cmdRestartLabel: "重启 AI 员工",
