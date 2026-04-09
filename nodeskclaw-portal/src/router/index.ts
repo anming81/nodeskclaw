@@ -39,8 +39,7 @@ const ceRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/workspace/:id/settings',
-    name: 'WorkspaceSettings',
-    component: () => import('@/views/WorkspaceSettings.vue'),
+    redirect: (to) => `/workspace/${to.params.id}`,
   },
   {
     path: '/instances',

@@ -17,6 +17,7 @@ import AgentCollaborationPanel from '@/components/workspace/AgentCollaborationPa
 import AgentDetailDialog from '@/components/workspace/AgentDetailDialog.vue'
 import CollaborationTimeline from '@/components/workspace/CollaborationTimeline.vue'
 import AddAgentDialog from '@/components/workspace/AddAgentDialog.vue'
+import WorkspaceSettings from '@/views/WorkspaceSettings.vue'
 import { useToast } from '@/composables/useToast'
 import { axialToWorld } from '@/composables/useHexLayout'
 import { getCurrentLocale, setCurrentLocale } from '@/i18n'
@@ -28,6 +29,7 @@ const store = useWorkspaceStore()
 const authStore = useAuthStore()
 
 const locale = ref(getCurrentLocale())
+const showSettingsDialog = ref(false)
 function onLocaleChange(value: string) {
   locale.value = setCurrentLocale(value)
 }
@@ -922,7 +924,7 @@ function handleKeydown(e: KeyboardEvent) {
         <button
           v-if="store.hasPermission('manage_settings')"
           class="p-1.5 rounded-lg hover:bg-muted transition-colors"
-          @click="router.push(`/workspace/${workspaceId}/settings`)"
+          @click="showSettingsDialog = true"
         >
           <Settings class="w-4 h-4" />
         </button>
@@ -1316,7 +1318,7 @@ function handleKeydown(e: KeyboardEvent) {
               <p class="text-sm text-muted-foreground">{{ t('hexAction.noAvailableMembers') }}</p>
               <button
                 class="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 transition-colors"
-                @click="showMemberPicker = false; router.push(`/workspace/${workspaceId}/settings`)"
+                @click="showMemberPicker = false; showSettingsDialog = true"
               >
                 {{ t('hexAction.goToSettings') }}
               </button>
@@ -1453,6 +1455,12 @@ function handleKeydown(e: KeyboardEvent) {
       :target-hex-q="addAgentHexQ"
       :target-hex-r="addAgentHexR"
       @added="onAgentAdded"
+    />
+
+    <WorkspaceSettings
+      v-model:open="showSettingsDialog"
+      :workspace-id="workspaceId"
+      @deleted="router.push('/')"
     />
   </div>
 </template>

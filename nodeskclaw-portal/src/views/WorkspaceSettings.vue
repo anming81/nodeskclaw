@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, Save, Trash2, Loader2, Users, Palette, UserPlus, Search, Shield, ShieldCheck, X, LayoutTemplate, ChevronRight } from 'lucide-vue-next'
+import { Save, Trash2, Loader2, Users, Palette, UserPlus, Search, Shield, ShieldCheck, X, LayoutTemplate, ChevronRight } from 'lucide-vue-next'
 import Workspace2D from '@/components/hex2d/Workspace2D.vue'
 import {
   useWorkspaceStore,
@@ -30,15 +29,23 @@ import {
   keysToExcludedCorridorCoords,
 } from '@/utils/templateTopology'
 
+const props = defineProps<{
+  open: boolean
+  workspaceId: string
+}>()
+
+const emit = defineEmits<{
+  'update:open': [value: boolean]
+  deleted: []
+}>()
+
 const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
 const store = useWorkspaceStore()
 const authStore = useAuthStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
-const workspaceId = computed(() => route.params.id as string)
+const workspaceId = computed(() => props.workspaceId)
 const canManageMembers = computed(() => store.hasPermission('manage_members'))
 const canManageSettings = computed(() => store.hasPermission('manage_settings'))
 const canDeleteWorkspace = computed(() => store.hasPermission('delete_workspace'))
@@ -54,7 +61,8 @@ const colors = [
   '#f87171', '#f472b6', '#38bdf8', '#a3e635',
 ]
 
-onMounted(async () => {
+watch(() => props.open, async (isOpen) => {
+  if (!isOpen) return
   await store.fetchWorkspace(workspaceId.value)
   await store.fetchMyPermissions(workspaceId.value)
   await store.fetchMembers(workspaceId.value)
@@ -91,7 +99,8 @@ async function handleDelete() {
   deleting.value = true
   try {
     await store.deleteWorkspace(workspaceId.value)
-    router.push('/')
+    emit('update:open', false)
+    emit('deleted')
   } catch (e: any) {
     toast.error(resolveApiErrorMessage(e, t('workspaceSettings.deleteFailed')))
   } finally {
@@ -408,16 +417,17 @@ async function handleRemoveMember(member: WorkspaceMemberInfo) {
 </script>
 
 <template>
-  <div class="max-w-xl mx-auto px-6 py-8">
-    <!-- Header -->
-    <div class="flex items-center gap-3 mb-8">
-      <button class="p-1.5 rounded-lg hover:bg-muted transition-colors" @click="router.push(`/workspace/${workspaceId}`)">
-        <ArrowLeft class="w-5 h-5" />
-      </button>
-      <h1 class="text-xl font-bold">{{ t('workspaceSettings.title') }}</h1>
-    </div>
-
-    <div class="space-y-6">
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="open" class="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" @click.self="emit('update:open', false)">
+        <div class="bg-card rounded-xl shadow-2xl w-full max-w-xl border border-border max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+            <h3 class="text-base font-semibold">{{ t('workspaceSettings.title') }}</h3>
+            <button type="button" class="p-1 rounded hover:bg-muted" @click="emit('update:open', false)">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+          <div class="px-5 py-5 space-y-6 overflow-y-auto">
       <!-- Basic Settings -->
       <div class="space-y-2">
         <label class="text-sm font-medium">{{ t('workspaceSettings.nameLabel') }}</label>
@@ -600,10 +610,14 @@ async function handleRemoveMember(member: WorkspaceMemberInfo) {
           <Trash2 v-else class="w-4 h-4" />
         </button>
       </div>
-    </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
-    <!-- Save as Template Dialog -->
-    <Teleport to="body">
+  <!-- Save as Template Dialog -->
+  <Teleport to="body">
       <Transition name="fade">
         <div v-if="showTemplateDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" @click.self="showTemplateDialog = false">
           <div class="bg-card rounded-xl shadow-2xl w-full max-w-lg border border-border max-h-[90vh] flex flex-col">
@@ -846,5 +860,4 @@ async function handleRemoveMember(member: WorkspaceMemberInfo) {
         </div>
       </Transition>
     </Teleport>
-  </div>
 </template>
