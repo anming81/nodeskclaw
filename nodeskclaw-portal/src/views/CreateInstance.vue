@@ -489,7 +489,7 @@ const runtimeHasLlm = computed(() => getRuntimeCaps(selectedRuntime.value).llmCo
 const llmReady = computed(() => {
   if (!runtimeHasLlm.value) return true
   return llmConfigs.value.every(c => {
-    if (c.isCustom) return !!c.baseUrl && !!c.personalKey && !!c.selectedModel
+    if (c.isCustom) return !!c.baseUrl && (c.keySource === 'org' || !!c.personalKey) && !!c.selectedModel
     if (isCodexProvider(c.provider)) return !!c.selectedModel
     if (BUILTIN_PROVIDERS.has(c.provider)) return true
     return !!c.selectedModel
