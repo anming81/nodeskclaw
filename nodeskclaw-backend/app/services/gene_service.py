@@ -1828,7 +1828,7 @@ async def _report_effectiveness_to_registry(
 
 
 async def _recalc_effectiveness_score(db: AsyncSession, gene_id: str) -> None:
-    """Recalculate effectiveness_score = user_rating 25% + agent_self_eval 25% + usage_effect 50%."""
+    """Recalculate effectiveness_score = rating 20% + self_eval 15% + usage 30% + task_success 35%."""
     gene_result = await db.execute(
         select(Gene).where(Gene.id == gene_id, Gene.deleted_at.is_(None))
     )
@@ -1866,7 +1866,33 @@ async def _recalc_effectiveness_score(db: AsyncSession, gene_id: str) -> None:
     total = pos_count + neg_count
     usage_effect = (pos_count / total) if total > 0 else 0.5
 
-    score = user_rating_norm * 0.25 + float(agent_eval) * 0.25 + usage_effect * 0.50
+    task_ok_result = await db.execute(
+        select(func.count()).where(
+            GeneEffectLog.gene_id == gene_id,
+            GeneEffectLog.metric_type == EffectMetricType.task_success,
+            GeneEffectLog.value >= 0.5,
+        )
+    )
+    task_ok = task_ok_result.scalar() or 0
+
+    task_fail_result = await db.execute(
+        select(func.count()).where(
+            GeneEffectLog.gene_id == gene_id,
+            GeneEffectLog.metric_type == EffectMetricType.task_success,
+            GeneEffectLog.value < 0.5,
+        )
+    )
+    task_fail = task_fail_result.scalar() or 0
+
+    task_total = task_ok + task_fail
+    task_success_rate = (task_ok / task_total) if task_total > 0 else 0.5
+
+    score = (
+        user_rating_norm * 0.20
+        + float(agent_eval) * 0.15
+        + usage_effect * 0.30
+        + task_success_rate * 0.35
+    )
     gene.effectiveness_score = round(score, 4)
     await db.commit()
 
@@ -1874,7 +1900,7 @@ async def _recalc_effectiveness_score(db: AsyncSession, gene_id: str) -> None:
 async def _get_effectiveness_breakdown(
     db: AsyncSession, gene_id: str, avg_rating: float
 ) -> dict:
-    """Return the three components that make up effectiveness_score."""
+    """Return the four components that make up effectiveness_score."""
     user_rating_norm = avg_rating / 5.0 if avg_rating else 0.0
 
     agent_eval_result = await db.execute(
@@ -1905,12 +1931,36 @@ async def _get_effectiveness_breakdown(
     total = pos_count + neg_count
     usage_effect = (pos_count / total) if total > 0 else 0.5
 
+    task_ok_result = await db.execute(
+        select(func.count()).where(
+            GeneEffectLog.gene_id == gene_id,
+            GeneEffectLog.metric_type == EffectMetricType.task_success,
+            GeneEffectLog.value >= 0.5,
+        )
+    )
+    task_success_count = task_ok_result.scalar() or 0
+
+    task_fail_result = await db.execute(
+        select(func.count()).where(
+            GeneEffectLog.gene_id == gene_id,
+            GeneEffectLog.metric_type == EffectMetricType.task_success,
+            GeneEffectLog.value < 0.5,
+        )
+    )
+    task_fail_count = task_fail_result.scalar() or 0
+
+    task_total = task_success_count + task_fail_count
+    task_success_rate = (task_success_count / task_total) if task_total > 0 else 0.5
+
     return {
         "user_rating": round(user_rating_norm, 4),
         "agent_eval": round(agent_eval, 4),
         "usage_effect": round(usage_effect, 4),
         "positive_count": pos_count,
         "negative_count": neg_count,
+        "task_success_rate": round(task_success_rate, 4),
+        "task_success_count": task_success_count,
+        "task_fail_count": task_fail_count,
     }
 
 
