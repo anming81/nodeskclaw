@@ -495,7 +495,7 @@ function selectInstance(instanceId: string) {
                     <span class="text-xs text-foreground">{{ t('gene.userRatingComponent') }}</span>
                     <span class="text-xs text-muted-foreground">
                       {{ Math.round(gene.effectiveness_breakdown.user_rating * 100) }}%
-                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '25%' }) }}</span>
+                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '20%' }) }}</span>
                     </span>
                   </div>
                   <div class="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -510,7 +510,7 @@ function selectInstance(instanceId: string) {
                     <span class="text-xs text-foreground">{{ t('gene.agentEvalComponent') }}</span>
                     <span class="text-xs text-muted-foreground">
                       {{ Math.round(gene.effectiveness_breakdown.agent_eval * 100) }}%
-                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '25%' }) }}</span>
+                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '15%' }) }}</span>
                     </span>
                   </div>
                   <div class="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -525,7 +525,7 @@ function selectInstance(instanceId: string) {
                     <span class="text-xs text-foreground">{{ t('gene.usageEffectComponent') }}</span>
                     <span class="text-xs text-muted-foreground">
                       {{ Math.round(gene.effectiveness_breakdown.usage_effect * 100) }}%
-                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '50%' }) }}</span>
+                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '30%' }) }}</span>
                       <span
                         v-if="gene.effectiveness_breakdown.positive_count + gene.effectiveness_breakdown.negative_count > 0"
                         class="text-muted-foreground/60 ml-1"
@@ -538,6 +538,27 @@ function selectInstance(instanceId: string) {
                     <div
                       class="h-full rounded-full bg-emerald-400 transition-all"
                       :style="{ width: `${Math.min(100, gene.effectiveness_breakdown.usage_effect * 100)}%` }"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs text-foreground">{{ t('gene.taskSuccessComponent') }}</span>
+                    <span class="text-xs text-muted-foreground">
+                      {{ Math.round((gene.effectiveness_breakdown.task_success_rate ?? 0.5) * 100) }}%
+                      <span class="text-muted-foreground/60 ml-1">{{ t('gene.weightLabel', { weight: '35%' }) }}</span>
+                      <span
+                        v-if="(gene.effectiveness_breakdown.task_success_count ?? 0) + (gene.effectiveness_breakdown.task_fail_count ?? 0) > 0"
+                        class="text-muted-foreground/60 ml-1"
+                      >
+                        ({{ t('gene.taskSuccessCount', { success: gene.effectiveness_breakdown.task_success_count ?? 0, fail: gene.effectiveness_breakdown.task_fail_count ?? 0 }) }})
+                      </span>
+                    </span>
+                  </div>
+                  <div class="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      class="h-full rounded-full bg-violet-400 transition-all"
+                      :style="{ width: `${Math.min(100, (gene.effectiveness_breakdown.task_success_rate ?? 0.5) * 100)}%` }"
                     />
                   </div>
                 </div>

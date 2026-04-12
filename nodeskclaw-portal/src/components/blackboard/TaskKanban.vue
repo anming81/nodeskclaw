@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { AlertCircle, CheckCircle2, Clock, DollarSign, Loader2, Play } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, Clock, DollarSign, Loader2, Play, XCircle } from 'lucide-vue-next'
 import { useWorkspaceStore, type TaskInfo } from '@/stores/workspace'
 import { useI18n } from 'vue-i18n'
 
-type ActiveTaskStatus = 'pending' | 'in_progress' | 'done' | 'blocked'
+type ActiveTaskStatus = 'pending' | 'in_progress' | 'done' | 'blocked' | 'failed'
 type TaskBucketKey = ActiveTaskStatus
 
 interface TaskBucketState {
@@ -17,7 +17,7 @@ interface TaskBucketState {
   requestSeq: number
 }
 
-const ACTIVE_BUCKET_KEYS: ActiveTaskStatus[] = ['pending', 'in_progress', 'done', 'blocked']
+const ACTIVE_BUCKET_KEYS: ActiveTaskStatus[] = ['pending', 'in_progress', 'done', 'blocked', 'failed']
 const PAGE_SIZE = 20
 const LOAD_MORE_THRESHOLD = 160
 
@@ -33,6 +33,7 @@ const columns = computed(() => [
   { key: 'in_progress' as const, label: t('blackboard.taskInProgress'), icon: Play, color: 'text-blue-500' },
   { key: 'done' as const, label: t('blackboard.taskDone'), icon: CheckCircle2, color: 'text-green-500' },
   { key: 'blocked' as const, label: t('blackboard.taskBlocked'), icon: AlertCircle, color: 'text-red-500' },
+  { key: 'failed' as const, label: t('blackboard.taskFailed'), icon: XCircle, color: 'text-orange-500' },
 ])
 
 function createBucketState(): TaskBucketState {
@@ -52,6 +53,7 @@ const taskBuckets = reactive<Record<TaskBucketKey, TaskBucketState>>({
   in_progress: createBucketState(),
   done: createBucketState(),
   blocked: createBucketState(),
+  failed: createBucketState(),
 })
 
 const scrollContainers: Record<TaskBucketKey, HTMLElement | null> = {
@@ -59,6 +61,7 @@ const scrollContainers: Record<TaskBucketKey, HTMLElement | null> = {
   in_progress: null,
   done: null,
   blocked: null,
+  failed: null,
 }
 
 const editingValueTaskId = ref<string | null>(null)
@@ -243,7 +246,7 @@ defineExpose({ refresh: refreshAllBuckets })
       <h3 class="text-sm font-medium text-muted-foreground">{{ t('blackboard.tasks') }}</h3>
     </div>
 
-    <div class="grid grid-cols-4 gap-3">
+    <div class="grid grid-cols-5 gap-3">
       <div
         v-for="col in columns"
         :key="col.key"
