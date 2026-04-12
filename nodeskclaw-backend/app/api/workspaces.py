@@ -544,6 +544,7 @@ async def get_performance(
 
     total = len(rows)
     done = sum(1 for t in rows if t.status in ("done", "archived"))
+    failed = sum(1 for t in rows if t.status == "failed")
     completion_rate = done / total if total > 0 else 0.0
     total_value = sum(t.actual_value or 0 for t in rows if t.status in ("done", "archived"))
     from app.models.workspace_agent import WorkspaceAgent
@@ -582,6 +583,7 @@ async def get_performance(
         "instance_id": instance_id,
         "total_tasks": total,
         "completed_tasks": done,
+        "failed_tasks": failed,
         "task_completion_rate": round(completion_rate, 4),
         "total_value_created": round(total_value, 2),
         "total_token_cost": total_tokens,
@@ -612,11 +614,13 @@ async def collect_performance(
     for t in rows:
         aid = t.assignee_instance_id or "unassigned"
         if aid not in agent_stats:
-            agent_stats[aid] = {"total": 0, "done": 0, "value": 0.0, "tokens": 0}
+            agent_stats[aid] = {"total": 0, "done": 0, "failed": 0, "value": 0.0, "tokens": 0}
         agent_stats[aid]["total"] += 1
         if t.status in ("done", "archived"):
             agent_stats[aid]["done"] += 1
             agent_stats[aid]["value"] += t.actual_value or 0
+        elif t.status == "failed":
+            agent_stats[aid]["failed"] += 1
         agent_stats[aid]["tokens"] += t.token_cost or 0
 
     result = []
@@ -627,6 +631,7 @@ async def collect_performance(
             "instance_id": aid,
             "total_tasks": s["total"],
             "completed_tasks": s["done"],
+            "failed_tasks": s["failed"],
             "task_completion_rate": round(rate, 4),
             "total_value_created": round(s["value"], 2),
             "total_token_cost": s["tokens"],

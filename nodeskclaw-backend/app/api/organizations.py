@@ -398,6 +398,7 @@ async def org_akr_summary(
         ws_tasks = [t for t in tasks if t.workspace_id == ws_id]
         total_t = len(ws_tasks)
         done_t = sum(1 for t in ws_tasks if t.status in ("done", "archived"))
+        failed_t = sum(1 for t in ws_tasks if t.status == "failed")
         total_value = sum(t.actual_value or 0 for t in ws_tasks if t.status in ("done", "archived"))
         total_tokens = sum(t.token_cost or 0 for t in ws_tasks)
         roi = total_value / total_tokens * 1000 if total_tokens > 0 else 0.0
@@ -417,6 +418,7 @@ async def org_akr_summary(
             "objectives": obj_summaries,
             "total_tasks": total_t,
             "completed_tasks": done_t,
+            "failed_tasks": failed_t,
             "completion_rate": round(done_t / total_t, 4) if total_t > 0 else 0.0,
             "total_value": round(total_value, 2),
             "total_tokens": total_tokens,
