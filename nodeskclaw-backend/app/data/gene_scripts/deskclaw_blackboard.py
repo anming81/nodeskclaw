@@ -9,7 +9,7 @@ Actions:
   update_blackboard --content TEXT                  Update blackboard markdown content
   patch_section --section HEADING --content TEXT    Update a specific section by heading
 
-  list_tasks [--status STATUS]                     List tasks (pending/in_progress/done/blocked)
+  list_tasks [--status STATUS]                     List tasks (pending/in_progress/done/blocked/failed)
   create_task --title TITLE [options]               Create a new task
   update_task --task-id ID [options]                Update a task
 
@@ -54,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--content", required=True)
 
     sp = sub.add_parser("list_tasks", help="List tasks")
-    sp.add_argument("--status", choices=["pending", "in_progress", "done", "blocked"])
+    sp.add_argument("--status", choices=["pending", "in_progress", "done", "blocked", "failed"])
 
     sp = sub.add_parser("create_task", help="Create a task")
     sp.add_argument("--title", required=True)
@@ -67,7 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--task-id", required=True)
     sp.add_argument("--title")
     sp.add_argument("--description")
-    sp.add_argument("--status", choices=["pending", "in_progress", "done", "blocked"])
+    sp.add_argument("--status", choices=["pending", "in_progress", "done", "blocked", "failed"])
     sp.add_argument("--priority", choices=["urgent", "high", "medium", "low"])
     sp.add_argument("--assignee-id")
     sp.add_argument("--estimated-value", type=float)
