@@ -903,7 +903,7 @@ async def patch_blackboard_section(
 
 # ── Tasks ────────────────────────────────────────────
 
-VALID_TASK_STATUSES = {"pending", "in_progress", "done", "blocked"}
+VALID_TASK_STATUSES = {"pending", "in_progress", "done", "blocked", "failed"}
 VALID_TASK_PRIORITIES = {"low", "medium", "high", "urgent"}
 VALID_TASK_BUCKETS = {"active", "inactive", "column"}
 

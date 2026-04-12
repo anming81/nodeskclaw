@@ -1781,6 +1781,38 @@ async def log_effectiveness(
     return {"logged": True}
 
 
+async def log_task_outcome(
+    db: AsyncSession,
+    assignee_instance_id: str,
+    task_id: str,
+    task_title: str,
+    success: bool,
+) -> int:
+    """Write task_success effect logs for all installed genes on the assignee instance."""
+    ig_result = await db.execute(
+        select(InstanceGene).where(
+            InstanceGene.instance_id == assignee_instance_id,
+            InstanceGene.status == InstanceGeneStatus.installed,
+            not_deleted(InstanceGene),
+        )
+    )
+    installed_genes = ig_result.scalars().all()
+
+    count = 0
+    context = json.dumps({"task_id": task_id, "title": task_title})
+    for ig in installed_genes:
+        await log_effectiveness(
+            db,
+            assignee_instance_id,
+            ig.gene_id,
+            metric_type=EffectMetricType.task_success,
+            value=1.0 if success else 0.0,
+            context=context,
+        )
+        count += 1
+    return count
+
+
 async def _report_install_to_registry(slug: str, source_registry: str | None = None) -> None:
     aggregator = get_aggregator()
     registry_id = source_registry or "local"

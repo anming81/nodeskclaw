@@ -343,6 +343,41 @@ async def _notify_agents_task_done(workspace_id: str, task_title: str):
         logger.warning("通知 Agent 任务完成失败: %s", e)
 
 
+async def _notify_agents_task_failed(workspace_id: str, task_title: str):
+    """Send system message to workspace agents when a task is marked failed."""
+    try:
+        from app.services import corridor_router
+        from app.services.collaboration_service import send_system_message_to_agents
+        from app.models.base import not_deleted
+
+        async with async_session_factory() as db:
+            has_topo = await corridor_router.has_any_connections(workspace_id, db)
+            if has_topo:
+                audience = await corridor_router.get_blackboard_audience(workspace_id, db)
+                agent_ids = [ep.entity_id for ep in audience if ep.endpoint_type == "agent"]
+            else:
+                agents_q = await db.execute(
+                    sa_select(Instance.id)
+                    .join(
+                        WorkspaceAgent,
+                        (WorkspaceAgent.instance_id == Instance.id)
+                        & (WorkspaceAgent.deleted_at.is_(None)),
+                    )
+                    .where(
+                        WorkspaceAgent.workspace_id == workspace_id,
+                        Instance.status == "running",
+                        Instance.deleted_at.is_(None),
+                    )
+                )
+                agent_ids = [r[0] for r in agents_q.all()]
+
+            if agent_ids:
+                message = f"任务「{task_title}」已标记为失败，请检查黑板了解详情。"
+                await send_system_message_to_agents(workspace_id, agent_ids, message, db)
+    except Exception as e:
+        logger.warning("通知 Agent 任务失败失败: %s", e)
+
+
 # ── Tasks ────────────────────────────────────────────
 
 @router.get("/{workspace_id}/blackboard/tasks")
@@ -411,6 +446,20 @@ async def update_task(
         })
         if new_status == "done":
             _fire_task(_notify_agents_task_done(workspace_id, task_info.title))
+        elif new_status == "failed":
+            _fire_task(_notify_agents_task_failed(workspace_id, task_info.title))
+        if new_status in ("done", "failed") and task_info.assignee_instance_id:
+            try:
+                from app.services import gene_service
+                await gene_service.log_task_outcome(
+                    db,
+                    task_info.assignee_instance_id,
+                    task_id,
+                    task_info.title,
+                    success=(new_status == "done"),
+                )
+            except Exception as e:
+                logger.warning("写入 task_success 效果日志失败: %s", e)
     return _ok(task_info.model_dump(mode="json"))
 
 
