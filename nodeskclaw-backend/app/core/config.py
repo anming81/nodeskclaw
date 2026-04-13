@@ -4,6 +4,7 @@ import logging
 import re
 import socket
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -109,6 +110,7 @@ class Settings(BaseSettings):
     VKE_SUBNET_ID: str = ""
 
     # ── LLM Proxy ─────────────────────────────────────────
+    NODESKCLAW_WEBHOOK_BASE_URL: str = ""  # AI 员工回调后端的基础地址，如 http://nodeskclaw-backend:4510
     NODESKCLAW_HOST: str = ""  # 外部可达域名，如 https://nodeskclaw.example.com（废弃，保留兼容）
     LLM_PROXY_URL: str = ""  # 独立 LLM Proxy 服务外部地址，如 https://llm-proxy.example.com
     LLM_PROXY_INTERNAL_URL: str = ""  # K8s 集群内网地址，用于 openclaw.json 中的 baseUrl（绕过 ALB）
@@ -157,3 +159,29 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _strip_api_path(base_url: str) -> str:
+    parsed = urlsplit(base_url.rstrip("/"))
+    if not parsed.scheme or not parsed.netloc:
+        return base_url.rstrip("/")
+    path = parsed.path.rstrip("/")
+    for suffix in ("/api/v1", "/api"):
+        if path.endswith(suffix):
+            path = path[: -len(suffix)]
+            break
+    return urlunsplit((parsed.scheme, parsed.netloc, path, "", "")).rstrip("/")
+
+
+def get_nodeskclaw_webhook_base_url(cfg: Settings | None = None) -> str:
+    active_settings = cfg or settings
+    candidates = [
+        getattr(active_settings, "NODESKCLAW_WEBHOOK_BASE_URL", ""),
+        getattr(active_settings, "NODESKCLAW_HOST", ""),
+        _strip_api_path(getattr(active_settings, "AGENT_API_BASE_URL", "")),
+    ]
+    for candidate in candidates:
+        normalized = candidate.rstrip("/") if candidate else ""
+        if normalized:
+            return normalized
+    return ""

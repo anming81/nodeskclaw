@@ -15,7 +15,7 @@ from urllib.parse import urlparse as _urlparse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import get_nodeskclaw_webhook_base_url, settings
 from app.core.exceptions import AppException, BadRequestError
 from app.models.base import not_deleted
 from app.models.cluster import Cluster
@@ -974,7 +974,7 @@ def _inject_learning_channel_config(
     if "channels" not in config:
         config["channels"] = {}
 
-    callback_base = getattr(settings, "NODESKCLAW_WEBHOOK_BASE_URL", "") or ""
+    callback_base = get_nodeskclaw_webhook_base_url()
 
     config["channels"]["learning"] = {
         "accounts": {
