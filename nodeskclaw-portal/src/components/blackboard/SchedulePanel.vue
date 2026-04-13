@@ -29,6 +29,7 @@ const form = ref({
   name: '',
   cron_expr: '0 */4 * * *',
   message_template: '',
+  timeout_minutes: 120,
 })
 
 const cronPickerRef = ref<InstanceType<typeof CronPicker> | null>(null)
@@ -71,7 +72,7 @@ function cronToHuman(expr: string): string {
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', cron_expr: '0 */4 * * *', message_template: '' }
+  form.value = { name: '', cron_expr: '0 */4 * * *', message_template: '', timeout_minutes: 120 }
   dialogOpen.value = true
 }
 
@@ -81,6 +82,7 @@ function openEdit(schedule: ScheduleInfo) {
     name: schedule.name,
     cron_expr: schedule.cron_expr,
     message_template: schedule.message_template,
+    timeout_minutes: schedule.timeout_minutes ?? 120,
   }
   dialogOpen.value = true
 }
@@ -95,6 +97,7 @@ function applyPreset(preset: { name: string; label: string; cron_expr: string; m
   form.value.name = presetLabel(preset)
   form.value.cron_expr = preset.cron_expr
   form.value.message_template = preset.message_template
+  form.value.timeout_minutes = 120
 }
 
 async function handleSubmit() {
@@ -106,6 +109,7 @@ async function handleSubmit() {
         name: form.value.name.trim(),
         cron_expr: form.value.cron_expr,
         message_template: form.value.message_template.trim(),
+        timeout_minutes: form.value.timeout_minutes,
       })
       toast.success(t('blackboard.scheduleUpdated'))
     } else {
@@ -113,6 +117,7 @@ async function handleSubmit() {
         name: form.value.name.trim(),
         cron_expr: form.value.cron_expr,
         message_template: form.value.message_template.trim(),
+        timeout_minutes: form.value.timeout_minutes,
       })
       toast.success(t('blackboard.scheduleCreated'))
     }
@@ -284,6 +289,18 @@ async function toggle(schedule: ScheduleInfo) {
               class="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
               :placeholder="t('blackboard.scheduleMessageRequired')"
             />
+          </div>
+
+          <!-- Timeout -->
+          <div>
+            <label class="block text-sm text-muted-foreground mb-1">{{ t('blackboard.scheduleTimeout') }}</label>
+            <input
+              v-model.number="form.timeout_minutes"
+              type="number"
+              min="10"
+              class="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <p class="text-xs text-muted-foreground mt-1">{{ t('blackboard.scheduleTimeoutHint') }}</p>
           </div>
 
           <!-- Actions -->

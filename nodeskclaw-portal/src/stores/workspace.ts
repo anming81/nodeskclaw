@@ -107,6 +107,8 @@ export interface TaskInfo {
   blocker_reason: string | null
   completed_at: string | null
   archived_at: string | null
+  schedule_id: string | null
+  deadline: string | null
   created_at: string
   updated_at: string
 }
@@ -268,6 +270,7 @@ export interface ScheduleInfo {
   cron_expr: string
   message_template: string
   is_active: boolean
+  timeout_minutes: number
   created_at: string | null
 }
 
@@ -591,14 +594,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function createSchedule(workspaceId: string, data: {
-    name: string; cron_expr: string; message_template: string; is_active?: boolean
+    name: string; cron_expr: string; message_template: string; is_active?: boolean; timeout_minutes?: number
   }) {
     await api.post(`/workspaces/${workspaceId}/schedules`, data)
     await fetchSchedules(workspaceId)
   }
 
   async function updateSchedule(workspaceId: string, scheduleId: string, data: {
-    name?: string; cron_expr?: string; message_template?: string; is_active?: boolean
+    name?: string; cron_expr?: string; message_template?: string; is_active?: boolean; timeout_minutes?: number
   }) {
     await api.put(`/workspaces/${workspaceId}/schedules/${scheduleId}`, data)
     await fetchSchedules(workspaceId)

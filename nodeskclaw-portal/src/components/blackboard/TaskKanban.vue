@@ -306,6 +306,12 @@ defineExpose({ refresh: refreshAllBuckets })
                   {{ task.blocker_reason }}
                 </div>
 
+                <div v-if="task.deadline" class="flex items-center gap-1 text-[11px]" :class="new Date(task.deadline) < new Date() ? 'text-red-400' : 'text-muted-foreground'">
+                  <Clock class="w-3 h-3" />
+                  {{ t('blackboard.taskDeadline') }}: {{ new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                  <span v-if="new Date(task.deadline) < new Date()" class="font-medium">{{ t('blackboard.taskOverdue') }}</span>
+                </div>
+
                 <div v-if="isValueEditable(col.key, task)" class="flex items-center gap-2 pt-1">
                   <template v-if="editingValueTaskId === task.id">
                     <input
