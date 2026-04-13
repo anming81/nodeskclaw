@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import get_nodeskclaw_webhook_base_url, settings
 from app.core.exceptions import AppException, BadRequestError, ConflictError, NotFoundError
 from app.models.base import not_deleted
 from app.models.corridor import HumanHex
@@ -1375,7 +1375,7 @@ async def _send_learning_task(
         skill = manifest.get("skill", {})
         learning = manifest.get("learning")
 
-        callback_base = settings.NODESKCLAW_WEBHOOK_BASE_URL or ""
+        callback_base = get_nodeskclaw_webhook_base_url()
         callback_url = build_gene_callback_url(
             callback_base,
             "/api/v1/genes/learning-callback",
@@ -2068,7 +2068,7 @@ async def trigger_gene_creation(
 
     task_id = str(uuid.uuid4())
 
-    callback_base = settings.NODESKCLAW_WEBHOOK_BASE_URL or ""
+    callback_base = get_nodeskclaw_webhook_base_url()
     callback_url = build_gene_callback_url(
         callback_base,
         "/api/v1/genes/creation-callback",
@@ -2419,7 +2419,7 @@ async def _send_forgetting_task(
         manifest = _json_loads(gene.manifest) or {}
         skill_content = manifest.get("skill", {}).get("content", "")
 
-        callback_base = settings.NODESKCLAW_WEBHOOK_BASE_URL or ""
+        callback_base = get_nodeskclaw_webhook_base_url()
         callback_url = build_gene_callback_url(
             callback_base,
             "/api/v1/genes/forgetting-callback",

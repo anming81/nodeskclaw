@@ -186,11 +186,11 @@ async def submit_approval_request(
     db.add(record)
     await db.commit()
 
-    from app.core.config import settings
+    from app.core.config import get_nodeskclaw_webhook_base_url, settings
 
     workspace_name = ws.name if ws else body.workspace_id
 
-    callback_base = getattr(settings, "NODESKCLAW_WEBHOOK_BASE_URL", "") or getattr(settings, "NODESKCLAW_HOST", "") or ""
+    callback_base = get_nodeskclaw_webhook_base_url()
     callback_url = f"{callback_base}/api/v1/workspaces/approval-requests/{record.id}/resolve"
 
     for ep in human_endpoints:
