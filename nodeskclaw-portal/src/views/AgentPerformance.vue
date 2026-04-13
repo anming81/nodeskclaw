@@ -201,7 +201,7 @@ onMounted(load)
             <div class="space-y-1">
               <div class="text-xs text-muted-foreground flex items-center gap-1">
                 <Coins class="w-3 h-3" />
-                Token
+                {{ t('blackboard.agentPerf.tokenCost') }}
               </div>
               <div class="text-lg font-semibold">{{ fmtTokenK(agent.total_token_cost) }}</div>
               <div class="text-[10px] text-muted-foreground">

@@ -652,7 +652,7 @@ async def get_agent_performance(
     await wm_service.check_workspace_member(workspace_id, user, db)
     from app.models.workspace_task import WorkspaceTask
     from app.models.workspace_schedule import WorkspaceSchedule
-    from sqlalchemy import case, text, extract
+    from sqlalchemy import case, extract
 
     cutoff = func.now() - func.make_interval(0, 0, 0, days)
 
