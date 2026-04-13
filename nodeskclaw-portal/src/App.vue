@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentLocale, setCurrentLocale } from '@/i18n'
-import { Settings, LogOut, Boxes, Server, FlaskConical, User, Loader2 } from 'lucide-vue-next'
+import { Settings, LogOut, Boxes, Server, FlaskConical, User, Loader2, BarChart3 } from 'lucide-vue-next'
+import { useFeature } from '@/composables/useFeature'
 import LocaleSelect from '@/components/shared/LocaleSelect.vue'
 import ToastContainer from '@/components/shared/ToastContainer.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
@@ -20,6 +21,7 @@ const showUserMenu = ref(false)
 const userMenuRef = ref<HTMLElement>()
 const locale = ref(getCurrentLocale())
 const appVersion = __APP_VERSION__
+const { isEnabled: isPerformanceEnabled } = useFeature('performance_analytics')
 
 function onDocumentClick(e: MouseEvent) {
   if (showUserMenu.value && userMenuRef.value && !userMenuRef.value.contains(e.target as Node)) {
@@ -107,6 +109,18 @@ function onLocaleChange(value: string) {
               <FlaskConical class="w-4 h-4 inline mr-1.5" />
               <span class="hidden lg:inline">{{ t('common.geneMarket') }}</span>
               <span class="lg:hidden">{{ t('nav.geneMarket') }}</span>
+            </button>
+            <button
+              v-if="isPerformanceEnabled"
+              :class="[
+                'shrink-0 whitespace-nowrap px-3 py-1.5 rounded-md text-sm transition-colors',
+                route.path.startsWith('/agent-performance') ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
+              ]"
+              @click="router.push('/agent-performance')"
+            >
+              <BarChart3 class="w-4 h-4 inline mr-1.5" />
+              <span class="hidden lg:inline">{{ t('agentPerformance.navTitle') }}</span>
+              <span class="lg:hidden">{{ t('nav.agentPerformance') }}</span>
             </button>
             <button
               v-if="authStore.user?.portal_org_role === 'admin'"

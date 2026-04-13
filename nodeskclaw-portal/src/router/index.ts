@@ -107,6 +107,12 @@ const ceRoutes: RouteRecordRaw[] = [
     redirect: '/org-settings',
   },
   {
+    path: '/agent-performance',
+    name: 'AgentPerformance',
+    component: () => import('@/views/AgentPerformance.vue'),
+    meta: { requireFeature: 'performance_analytics' },
+  },
+  {
     path: '/gene-market',
     name: 'GeneMarket',
     component: () => import('@/views/GeneMarket.vue'),

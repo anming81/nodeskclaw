@@ -629,6 +629,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return res.data.data as Record<string, unknown>
   }
 
+  async function fetchAgentPerformance(workspaceId: string, days = 30) {
+    const res = await api.get(`/workspaces/${workspaceId}/performance/agents`, { params: { days } })
+    return res.data.data as Record<string, unknown>
+  }
+
+  async function fetchGlobalAgentPerformance(days = 30) {
+    const res = await api.get('/users/me/agent-performance', { params: { days } })
+    return res.data.data as Record<string, unknown>
+  }
+
   // ── Members ───────────────────────────────────────
 
   async function fetchMembers(workspaceId: string) {
@@ -1517,6 +1527,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fetchPerformance,
     collectPerformance,
     attributeTokens,
+    fetchAgentPerformance,
+    fetchGlobalAgentPerformance,
     fetchMembers,
     fetchChatHistory,
     sendWorkspaceMessage,
