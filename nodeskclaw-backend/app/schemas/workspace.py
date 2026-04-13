@@ -97,6 +97,7 @@ class TaskInfo(BaseModel):
     token_cost: int | None = None
     blocker_reason: str | None = None
     completed_at: datetime | None = None
+    started_at: datetime | None = None
     archived_at: datetime | None = None
     schedule_id: str | None = None
     deadline: datetime | None = None
@@ -308,3 +309,71 @@ class FileWriteRequest(BaseModel):
 class MkdirRequest(BaseModel):
     parent_path: str = Field("/", max_length=1024)
     name: str = Field(..., min_length=1, max_length=255)
+
+
+# ── Agent Performance ───────────────────────────────
+
+class ScheduleReliability(BaseModel):
+    schedule_id: str
+    schedule_name: str
+    total: int
+    completed: int
+    failed: int
+    success_rate: float | None = None
+
+class AgentTaskMetrics(BaseModel):
+    instance_id: str
+    agent_name: str
+    theme_color: str | None = None
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    pending_tasks: int
+    in_progress_tasks: int
+    success_rate: float | None = None
+    total_work_minutes: float | None = None
+    avg_duration_minutes: float | None = None
+    total_token_cost: int = 0
+    total_prompt_token_cost: int = 0
+    total_completion_token_cost: int = 0
+    total_estimated_value: float = 0
+    total_actual_value: float = 0
+    roi_per_1k_tokens: float | None = None
+    schedules: list[ScheduleReliability] = []
+    other_workspace_count: int = 0
+
+class AgentPerformanceResponse(BaseModel):
+    agents: list[AgentTaskMetrics]
+    unclaimed_failures: int = 0
+
+
+class WorkspaceBreakdown(BaseModel):
+    workspace_id: str
+    workspace_name: str
+    total_tasks: int
+    completed_tasks: int
+    success_rate: float | None = None
+    total_token_cost: int = 0
+    total_actual_value: float = 0
+
+class GlobalAgentMetrics(BaseModel):
+    instance_id: str
+    agent_name: str
+    theme_color: str | None = None
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    success_rate: float | None = None
+    total_work_minutes: float | None = None
+    avg_duration_minutes: float | None = None
+    total_token_cost: int = 0
+    total_prompt_token_cost: int = 0
+    total_completion_token_cost: int = 0
+    total_estimated_value: float = 0
+    total_actual_value: float = 0
+    roi_per_1k_tokens: float | None = None
+    workspace_count: int = 0
+    workspaces: list[WorkspaceBreakdown] = []
+
+class GlobalAgentPerformanceResponse(BaseModel):
+    agents: list[GlobalAgentMetrics]

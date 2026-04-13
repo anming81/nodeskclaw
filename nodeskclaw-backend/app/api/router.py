@@ -27,6 +27,7 @@ from app.api.mcp import router as mcp_router
 from app.api.trust import router as trust_router
 from app.api.webhooks import router as webhook_router
 from app.api.blackboard import router as blackboard_router
+from app.api.performance import router as performance_router
 from app.api.workspaces import router as workspace_router
 from app.api.templates import router as template_router
 from app.api.workspace_deploys import router as workspace_deploys_router
@@ -121,6 +122,7 @@ api_router.include_router(portal_channel_config_router, prefix="/instances", tag
 api_router.include_router(portal_mcp_router, prefix="/instances", tags=["MCP"])
 api_router.include_router(portal_instance_files_router, prefix="/instances", tags=["实例文件"])
 api_router.include_router(llm_keys_router, tags=["LLM Key 管理"])
+api_router.include_router(performance_router, tags=["绩效"])
 api_router.include_router(registry_router, prefix="/registry", tags=["镜像仓库"])
 api_router.include_router(settings_router, prefix="/settings", tags=["系统配置"],
     dependencies=[Depends(require_ce_edition), Depends(require_org_admin)])

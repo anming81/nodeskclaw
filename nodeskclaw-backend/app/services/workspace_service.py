@@ -779,6 +779,7 @@ def _task_to_info(
         estimated_value=t.estimated_value, actual_value=t.actual_value,
         token_cost=t.token_cost, blocker_reason=t.blocker_reason,
         completed_at=completed_at, archived_at=t.archived_at,
+        started_at=t.started_at,
         schedule_id=t.schedule_id, deadline=t.deadline,
         created_at=t.created_at, updated_at=t.updated_at,
     )
@@ -1107,6 +1108,8 @@ async def update_task(
     normalized_status = "done" if data.status == "archived" else data.status
     if normalized_status is not None and normalized_status in VALID_TASK_STATUSES:
         task.status = normalized_status
+        if normalized_status == "in_progress" and task.started_at is None:
+            task.started_at = datetime.now(tz.utc)
         if normalized_status == "done" and task.completed_at is None:
             task.completed_at = datetime.now(tz.utc)
         if normalized_status != "done":

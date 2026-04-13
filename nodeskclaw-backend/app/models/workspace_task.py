@@ -31,6 +31,7 @@ class WorkspaceTask(BaseModel):
     completion_token_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
     blocker_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived_from_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     schedule_id: Mapped[str | None] = mapped_column(

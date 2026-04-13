@@ -641,6 +641,199 @@ async def collect_performance(
     return _ok(result)
 
 
+@router.get("/{workspace_id}/performance/agents")
+async def get_agent_performance(
+    workspace_id: str,
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(_get_current_user_or_agent_dep()),
+):
+    """Per-agent performance metrics with reliability, investment/output, schedule reliability."""
+    await wm_service.check_workspace_member(workspace_id, user, db)
+    from app.models.workspace_task import WorkspaceTask
+    from app.models.workspace_schedule import WorkspaceSchedule
+    from sqlalchemy import case, text, extract
+
+    cutoff = func.now() - func.make_interval(0, 0, 0, days)
+
+    completed_case = case(
+        (WorkspaceTask.status.in_(["done", "archived"]), 1), else_=0
+    )
+    failed_case = case((WorkspaceTask.status == "failed", 1), else_=0)
+    pending_case = case((WorkspaceTask.status == "pending", 1), else_=0)
+    in_progress_case = case((WorkspaceTask.status == "in_progress", 1), else_=0)
+
+    has_duration = (
+        WorkspaceTask.started_at.isnot(None)
+        & WorkspaceTask.completed_at.isnot(None)
+        & WorkspaceTask.status.in_(["done", "archived"])
+    )
+    duration_expr = extract("epoch", WorkspaceTask.completed_at - WorkspaceTask.started_at) / 60
+
+    q1 = (
+        sa_select(
+            WorkspaceTask.assignee_instance_id,
+            func.count().label("total"),
+            func.sum(completed_case).label("completed"),
+            func.sum(failed_case).label("failed"),
+            func.sum(pending_case).label("pending"),
+            func.sum(in_progress_case).label("in_progress"),
+            func.sum(case((has_duration, duration_expr), else_=None)).label("total_work_min"),
+            func.avg(case((has_duration, duration_expr), else_=None)).label("avg_duration_min"),
+            func.coalesce(func.sum(WorkspaceTask.token_cost), 0).label("total_token_cost"),
+            func.coalesce(func.sum(WorkspaceTask.prompt_token_cost), 0).label("total_prompt_token_cost"),
+            func.coalesce(func.sum(WorkspaceTask.completion_token_cost), 0).label("total_completion_token_cost"),
+            func.coalesce(func.sum(WorkspaceTask.estimated_value), 0).label("total_estimated_value"),
+            func.coalesce(func.sum(WorkspaceTask.actual_value), 0).label("total_actual_value"),
+        )
+        .where(
+            WorkspaceTask.workspace_id == workspace_id,
+            WorkspaceTask.deleted_at.is_(None),
+            WorkspaceTask.assignee_instance_id.isnot(None),
+            WorkspaceTask.created_at >= cutoff,
+        )
+        .group_by(WorkspaceTask.assignee_instance_id)
+    )
+    rows1 = (await db.execute(q1)).all()
+
+    if not rows1:
+        from app.schemas.workspace import AgentPerformanceResponse
+        return _ok(AgentPerformanceResponse(agents=[], unclaimed_failures=0).model_dump())
+
+    instance_ids = [r.assignee_instance_id for r in rows1]
+
+    q2 = (
+        sa_select(
+            WorkspaceTask.assignee_instance_id,
+            WorkspaceTask.schedule_id,
+            WorkspaceSchedule.name.label("schedule_name"),
+            func.count().label("total"),
+            func.sum(completed_case).label("completed"),
+            func.sum(failed_case).label("failed"),
+        )
+        .join(WorkspaceSchedule, WorkspaceSchedule.id == WorkspaceTask.schedule_id)
+        .where(
+            WorkspaceTask.workspace_id == workspace_id,
+            WorkspaceTask.deleted_at.is_(None),
+            WorkspaceTask.schedule_id.isnot(None),
+            WorkspaceTask.assignee_instance_id.isnot(None),
+            WorkspaceTask.created_at >= cutoff,
+        )
+        .group_by(
+            WorkspaceTask.assignee_instance_id,
+            WorkspaceTask.schedule_id,
+            WorkspaceSchedule.name,
+        )
+    )
+    rows2 = (await db.execute(q2)).all()
+
+    schedule_map: dict[str, list] = {}
+    for r in rows2:
+        comp = int(r.completed)
+        fail = int(r.failed)
+        denom = comp + fail
+        schedule_map.setdefault(r.assignee_instance_id, []).append({
+            "schedule_id": r.schedule_id,
+            "schedule_name": r.schedule_name,
+            "total": int(r.total),
+            "completed": comp,
+            "failed": fail,
+            "success_rate": round(comp / denom, 4) if denom > 0 else None,
+        })
+
+    q3 = (
+        sa_select(func.count())
+        .select_from(WorkspaceTask)
+        .where(
+            WorkspaceTask.workspace_id == workspace_id,
+            WorkspaceTask.deleted_at.is_(None),
+            WorkspaceTask.schedule_id.isnot(None),
+            WorkspaceTask.assignee_instance_id.is_(None),
+            WorkspaceTask.status == "failed",
+            WorkspaceTask.created_at >= cutoff,
+        )
+    )
+    unclaimed = (await db.execute(q3)).scalar() or 0
+
+    q4 = (
+        sa_select(
+            WorkspaceAgent.instance_id,
+            func.count(func.distinct(WorkspaceAgent.workspace_id)).label("ws_count"),
+        )
+        .where(
+            WorkspaceAgent.instance_id.in_(instance_ids),
+            WorkspaceAgent.deleted_at.is_(None),
+        )
+        .group_by(WorkspaceAgent.instance_id)
+    )
+    rows4 = (await db.execute(q4)).all()
+    cross_ws_map = {r.instance_id: max(int(r.ws_count) - 1, 0) for r in rows4}
+
+    name_q = (
+        sa_select(
+            WorkspaceAgent.instance_id,
+            func.coalesce(WorkspaceAgent.display_name, Instance.name).label("name"),
+            WorkspaceAgent.theme_color,
+        )
+        .join(Instance, Instance.id == WorkspaceAgent.instance_id)
+        .where(
+            WorkspaceAgent.workspace_id == workspace_id,
+            WorkspaceAgent.deleted_at.is_(None),
+            Instance.deleted_at.is_(None),
+        )
+    )
+    name_rows = (await db.execute(name_q)).all()
+    name_map = {r.instance_id: (r.name, r.theme_color) for r in name_rows}
+
+    missing_ids = [iid for iid in instance_ids if iid not in name_map]
+    if missing_ids:
+        fb = (await db.execute(
+            sa_select(Instance.id, Instance.name).where(
+                Instance.id.in_(missing_ids), Instance.deleted_at.is_(None),
+            )
+        )).all()
+        for r in fb:
+            name_map[r.id] = (r.name, None)
+
+    from app.schemas.workspace import AgentTaskMetrics, AgentPerformanceResponse, ScheduleReliability
+
+    agents = []
+    for r in rows1:
+        iid = r.assignee_instance_id
+        comp = int(r.completed)
+        fail = int(r.failed)
+        denom = comp + fail
+        total_tok = int(r.total_token_cost)
+        total_actual = float(r.total_actual_value)
+        aname, color = name_map.get(iid, (iid, None))
+
+        agents.append(AgentTaskMetrics(
+            instance_id=iid,
+            agent_name=aname,
+            theme_color=color,
+            total_tasks=int(r.total),
+            completed_tasks=comp,
+            failed_tasks=fail,
+            pending_tasks=int(r.pending),
+            in_progress_tasks=int(r.in_progress),
+            success_rate=round(comp / denom, 4) if denom > 0 else None,
+            total_work_minutes=round(float(r.total_work_min), 1) if r.total_work_min else None,
+            avg_duration_minutes=round(float(r.avg_duration_min), 1) if r.avg_duration_min else None,
+            total_token_cost=total_tok,
+            total_prompt_token_cost=int(r.total_prompt_token_cost),
+            total_completion_token_cost=int(r.total_completion_token_cost),
+            total_estimated_value=round(float(r.total_estimated_value), 2),
+            total_actual_value=round(total_actual, 2),
+            roi_per_1k_tokens=round(total_actual / (total_tok / 1000), 4) if total_tok > 0 else None,
+            schedules=[ScheduleReliability(**s) for s in schedule_map.get(iid, [])],
+            other_workspace_count=cross_ws_map.get(iid, 0),
+        ))
+
+    agents.sort(key=lambda a: a.total_tasks, reverse=True)
+    resp = AgentPerformanceResponse(agents=agents, unclaimed_failures=unclaimed)
+    return _ok(resp.model_dump())
+
+
 @router.post("/{workspace_id}/performance/attribute-tokens")
 async def attribute_tokens_to_tasks(
     workspace_id: str,
