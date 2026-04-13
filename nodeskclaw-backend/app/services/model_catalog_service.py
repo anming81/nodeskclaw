@@ -20,7 +20,7 @@ CACHE_TTL_SECONDS = 600
 
 def _make_client(verify: bool = True, **kwargs) -> httpx.AsyncClient:
     proxy = settings.HTTPS_PROXY or None
-    return httpx.AsyncClient(proxy=proxy, verify=verify, **kwargs)
+    return httpx.AsyncClient(proxy=proxy, verify=verify, trust_env=True, **kwargs)
 
 _cache: dict[str, tuple[float, list[ModelInfo]]] = {}
 

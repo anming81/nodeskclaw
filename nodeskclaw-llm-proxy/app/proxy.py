@@ -53,13 +53,13 @@ def _get_http_client(skip_ssl_verify: bool = False) -> httpx.AsyncClient:
         global _http_client_no_verify
         if _http_client_no_verify is None or _http_client_no_verify.is_closed:
             _http_client_no_verify = httpx.AsyncClient(
-                timeout=httpx.Timeout(300, connect=10), trust_env=False, verify=False,
+                timeout=httpx.Timeout(300, connect=10), trust_env=True, verify=False,
             )
         return _http_client_no_verify
 
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10), trust_env=False)
+        _http_client = httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10), trust_env=True)
     return _http_client
 
 
