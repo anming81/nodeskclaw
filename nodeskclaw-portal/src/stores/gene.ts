@@ -6,6 +6,9 @@ export interface EffectivenessBreakdown {
   user_rating: number
   agent_eval: number
   usage_effect: number
+  task_success_rate: number
+  task_success_count: number
+  task_fail_count: number
   positive_count: number
   negative_count: number
 }
