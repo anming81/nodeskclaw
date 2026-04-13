@@ -769,7 +769,8 @@ async def list_schedules(
     items = [
         {"id": s.id, "workspace_id": s.workspace_id, "name": s.name,
          "cron_expr": s.cron_expr, "message_template": s.message_template,
-         "is_active": s.is_active, "created_at": s.created_at}
+         "is_active": s.is_active, "timeout_minutes": s.timeout_minutes,
+         "created_at": s.created_at}
         for s in result.scalars().all()
     ]
     return _ok({"schedules": items, "presets": PRESET_TEMPLATES})
@@ -792,6 +793,7 @@ async def create_schedule(
         cron_expr=data.get("cron_expr", ""),
         message_template=data.get("message_template", ""),
         is_active=data.get("is_active", True),
+        timeout_minutes=data.get("timeout_minutes", 120),
     )
     db.add(schedule)
     await db.commit()
@@ -821,7 +823,7 @@ async def update_schedule(
     schedule = result.scalar_one_or_none()
     if not schedule:
         raise _error(404, 40434, "errors.schedule.not_found", "定时器不存在")
-    for field in ("name", "cron_expr", "message_template", "is_active"):
+    for field in ("name", "cron_expr", "message_template", "is_active", "timeout_minutes"):
         if field in data:
             setattr(schedule, field, data[field])
     await db.commit()
