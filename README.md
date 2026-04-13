@@ -40,13 +40,18 @@ Instant expansion of operating capacity. One-click deployment of AI operating pa
 ## Architecture
 
 ```mermaid
-flowchart TB
-    Human["Human Operators<br>Strategy · Judgment"] <-.->|"co-operate"| AI["AI Partners<br>Execution · Iteration"]
+flowchart LR
+    subgraph ops [" Co-operators "]
+        direction TB
+        Human["Human Operators<br>Strategy · Judgment"]
+        AI["AI Partners<br>Execution · Iteration"]
+        Human <-.->|co-operate| AI
+    end
 
-    Human & AI --> channels
+    ops --> channels
 
-    subgraph channels [" Engagement Channels "]
-        direction LR
+    subgraph channels [" Channels "]
+        direction TB
         Portal["Web Portal"]
         DingTalk["DingTalk"]
         OpenAPI["Open API"]
@@ -55,6 +60,7 @@ flowchart TB
     channels --> coopCore
 
     subgraph coopCore [" Co-operation Core "]
+        direction TB
         subgraph cyberWS [" Cyber Workspace "]
             direction LR
             Topo["Hex Topology"]
@@ -71,7 +77,7 @@ flowchart TB
     coopCore --> platform
 
     subgraph platform [" Platform Services "]
-        direction LR
+        direction TB
         Instance["Instance Lifecycle"]
         Cluster["Multi-Cluster"]
         Scale["Elastic Scale"]
@@ -82,7 +88,7 @@ flowchart TB
     platform --> infra
 
     subgraph infra [" Infrastructure "]
-        direction LR
+        direction TB
         K8s["Kubernetes"]
         Runtime["OpenClaw / Nanobot"]
         DB["PostgreSQL"]

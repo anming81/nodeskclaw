@@ -40,13 +40,18 @@ DeskClaw 是人与 AI 共同经营组织的平台。通过赛博办公室（Cybe
 ## 架构
 
 ```mermaid
-flowchart TB
-    Human["人类经营者<br>战略 · 判断"] <-.->|"共同经营"| AI["AI 经营伙伴<br>执行 · 迭代"]
+flowchart LR
+    subgraph ops [" 经营者 "]
+        direction TB
+        Human["人类经营者<br>战略 · 判断"]
+        AI["AI 经营伙伴<br>执行 · 迭代"]
+        Human <-.->|共同经营| AI
+    end
 
-    Human & AI --> channels
+    ops --> channels
 
     subgraph channels [" 经营入口 "]
-        direction LR
+        direction TB
         Portal["Web 门户"]
         DingTalk["钉钉"]
         OpenAPI["Open API"]
@@ -55,6 +60,7 @@ flowchart TB
     channels --> coopCore
 
     subgraph coopCore [" 共营核心 "]
+        direction TB
         subgraph cyberWS [" 赛博办公室 "]
             direction LR
             Topo["六边形拓扑"]
@@ -71,7 +77,7 @@ flowchart TB
     coopCore --> platform
 
     subgraph platform [" 平台服务 "]
-        direction LR
+        direction TB
         Instance["实例生命周期"]
         Cluster["多集群编排"]
         Scale["弹性伸缩"]
@@ -82,7 +88,7 @@ flowchart TB
     platform --> infra
 
     subgraph infra [" 基础设施 "]
-        direction LR
+        direction TB
         K8s["Kubernetes"]
         Runtime["OpenClaw / Nanobot"]
         DB["PostgreSQL"]
