@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Timer, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-vue-next'
+import { Timer, Plus, Pencil, Trash2, X, Loader2, TriangleAlert } from 'lucide-vue-next'
 import { useWorkspaceStore, type ScheduleInfo } from '@/stores/workspace'
 import { useI18n } from 'vue-i18n'
 import { useConfirm } from '@/composables/useConfirm'
@@ -179,11 +179,19 @@ async function toggle(schedule: ScheduleInfo) {
         :key="schedule.id"
         class="group flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/50"
       >
-        <div class="flex-1 min-w-0 mr-3">
+          <div class="flex-1 min-w-0 mr-3">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium truncate">{{ schedule.name }}</span>
             <span class="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
               {{ cronToHuman(schedule.cron_expr) }}
+            </span>
+            <span
+              v-if="schedule.consecutive_failures > 0"
+              class="inline-flex items-center gap-0.5 shrink-0 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-400"
+              :title="t('blackboard.schedules.consecutiveFailures', { count: schedule.consecutive_failures }) + ' — ' + (schedule.last_succeeded_at ? new Date(schedule.last_succeeded_at).toLocaleString() : t('blackboard.schedules.neverSucceeded'))"
+            >
+              <TriangleAlert class="w-3 h-3" />
+              {{ schedule.consecutive_failures }}
             </span>
           </div>
           <p class="text-xs text-muted-foreground mt-0.5 line-clamp-1">{{ schedule.message_template }}</p>
