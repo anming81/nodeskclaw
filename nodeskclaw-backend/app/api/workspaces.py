@@ -971,6 +971,8 @@ async def list_schedules(
         {"id": s.id, "workspace_id": s.workspace_id, "name": s.name,
          "cron_expr": s.cron_expr, "message_template": s.message_template,
          "is_active": s.is_active, "timeout_minutes": s.timeout_minutes,
+         "consecutive_failures": s.consecutive_failures,
+         "last_succeeded_at": s.last_succeeded_at,
          "created_at": s.created_at}
         for s in result.scalars().all()
     ]
@@ -1003,6 +1005,8 @@ async def create_schedule(
         "id": schedule.id, "workspace_id": schedule.workspace_id, "name": schedule.name,
         "cron_expr": schedule.cron_expr, "message_template": schedule.message_template,
         "is_active": schedule.is_active, "timeout_minutes": schedule.timeout_minutes,
+        "consecutive_failures": schedule.consecutive_failures,
+        "last_succeeded_at": schedule.last_succeeded_at,
         "created_at": schedule.created_at,
     })
 
@@ -1036,6 +1040,8 @@ async def update_schedule(
         "id": schedule.id, "workspace_id": schedule.workspace_id, "name": schedule.name,
         "cron_expr": schedule.cron_expr, "message_template": schedule.message_template,
         "is_active": schedule.is_active, "timeout_minutes": schedule.timeout_minutes,
+        "consecutive_failures": schedule.consecutive_failures,
+        "last_succeeded_at": schedule.last_succeeded_at,
         "created_at": schedule.created_at,
     })
 
