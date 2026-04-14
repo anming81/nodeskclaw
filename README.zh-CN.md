@@ -1,7 +1,7 @@
 [English](README.md)
 
-[![Discord](https://img.shields.io/discord/1483008731934359723?logo=discord&label=Discord&color=5865F2)](https://discord.gg/y5NKqcP6eY)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[Discord](https://discord.gg/y5NKqcP6eY)
+[License](LICENSE)
 
 # DeskClaw
 
@@ -37,6 +37,7 @@ DeskClaw 是人与 AI 共同经营组织的平台。通过赛博办公室（Cybe
 - **基因系统** -- 模块化能力投资：从公共或私有市场为 AI 装载新的经营维度
 - **一键扩容** -- 端到端扩展经营规模，SSE 实时推送进度
 - **多集群经营** -- 跨集群编排、健康巡检、弹性伸缩，覆盖整个经营版图
+
 ## 架构
 
 ```mermaid
@@ -96,6 +97,8 @@ flowchart LR
     end
 ```
 
+
+
 ### 项目结构
 
 ```
@@ -127,13 +130,15 @@ DeskClaw 以 Kubernetes 为主要部署方式，适用于 Staging 和 Production
 
 #### 前置条件
 
-| 依赖 | 说明 |
-|---|---|
+
+| 依赖            | 说明                                            |
+| ------------- | --------------------------------------------- |
 | Kubernetes 集群 | 1.24+，需安装 Ingress Controller（如 ingress-nginx） |
-| 容器镜像仓库 | 任意 Docker V2 仓库（Docker Hub、AWS ECR、GCR 等） |
-| PostgreSQL | 外部数据库（如 AWS RDS、GCP Cloud SQL） |
-| kubectl | 已配置集群访问权限 |
-| Docker | 用于本地构建镜像 |
+| 容器镜像仓库        | 任意 Docker V2 仓库（Docker Hub、AWS ECR、GCR 等）     |
+| PostgreSQL    | 外部数据库（如 AWS RDS、GCP Cloud SQL）                |
+| kubectl       | 已配置集群访问权限                                     |
+| Docker        | 用于本地构建镜像                                      |
+
 
 #### 1. 配置镜像仓库和集群上下文
 
@@ -186,10 +191,12 @@ kubectl --context <CTX> -n <NS> apply -f deploy/k8s/ingress.yaml
 
 Ingress 定义了两个域名入口（按需配置）：
 
-| Ingress | 默认域名 | 后端服务 |
-|---|---|---|
-| Portal（用户门户） | `console.example.com` | portal (80) + backend API (8000) |
-| LLM Proxy | `llm-proxy.example.com` | llm-proxy (80) |
+
+| Ingress      | 默认域名                    | 后端服务                             |
+| ------------ | ----------------------- | -------------------------------- |
+| Portal（用户门户） | `console.example.com`   | portal (80) + backend API (8000) |
+| LLM Proxy    | `llm-proxy.example.com` | llm-proxy (80)                   |
+
 
 完整 CLI 用法、镜像标签规则和 release/promote 工作流见 [deploy/README.md](deploy/README.md)。
 
@@ -197,11 +204,13 @@ Ingress 定义了两个域名入口（按需配置）：
 
 #### 前置条件
 
-| 依赖 | 说明 |
-|---|---|
-| Python >= 3.12 + [uv](https://docs.astral.sh/uv/) | 后端运行时与包管理器 |
-| Node.js >= 18 + npm | 前端运行时 |
-| PostgreSQL | 数据库（或使用下方 `--docker-pg` 选项） |
+
+| 依赖                                                | 说明                          |
+| ------------------------------------------------- | --------------------------- |
+| Python >= 3.12 + [uv](https://docs.astral.sh/uv/) | 后端运行时与包管理器                  |
+| Node.js >= 18 + npm                               | 前端运行时                       |
+| PostgreSQL                                        | 数据库（或使用下方 `--docker-pg` 选项） |
+
 
 #### 1. 配置
 
@@ -223,8 +232,7 @@ cp .env.example .env
 
 服务：backend (4510) + llm-proxy (4511) + portal (4517)
 
-<details>
-<summary>手动启动（备选）</summary>
+手动启动（备选）
 
 **后端：**
 
@@ -245,7 +253,7 @@ npm install && npm run dev
 
 Portal 地址 `http://localhost:4517` | `/api` 自动代理到后端。
 
-</details>
+
 
 #### 3. 登录
 
@@ -318,13 +326,15 @@ docker compose --env-file deploy/mirrors/cn.env up -d --build
 
 ## 文档
 
-| | |
-|---|---|
-| [后端](nodeskclaw-backend/README.md) | API 中枢、目录结构、环境变量 |
-| [用户门户](nodeskclaw-portal/README.md) | 经营者入口前端 |
-| [构建制品](nodeskclaw-artifacts/README.md) | DeskClaw 镜像构建与部署清单 |
-| [经营通道](openclaw-channel-nodeskclaw/README.md) | 赛博办公室通信基础设施 |
-| [LLM 代理](nodeskclaw-llm-proxy/README.md) | AI 智力供给中枢 |
+
+|                                               |                    |
+| --------------------------------------------- | ------------------ |
+| [后端](nodeskclaw-backend/README.md)            | API 中枢、目录结构、环境变量   |
+| [用户门户](nodeskclaw-portal/README.md)           | 经营者入口前端            |
+| [构建制品](nodeskclaw-artifacts/README.md)        | DeskClaw 镜像构建与部署清单 |
+| [经营通道](openclaw-channel-nodeskclaw/README.md) | 赛博办公室通信基础设施        |
+| [LLM 代理](nodeskclaw-llm-proxy/README.md)      | AI 智力供给中枢          |
+
 
 ## 社区
 
@@ -332,7 +342,7 @@ docker compose --env-file deploy/mirrors/cn.env up -d --build
 - [GitHub Issues](https://github.com/NoDeskAI/nodeskclaw/issues) -- Bug 报告与功能建议
 - 微信 -- 扫描下方二维码加入开发者交流群；若微信群已满，请优先使用上方 Discord
 
-<img src=".github/wechat-group-qr.png" alt="DeskClaw 团队版开发者交流群" width="280">
+
 
 ## 贡献
 

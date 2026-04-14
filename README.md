@@ -1,7 +1,7 @@
 [中文](README.zh-CN.md)
 
-[![Discord](https://img.shields.io/discord/1483008731934359723?logo=discord&label=Discord&color=5865F2)](https://discord.gg/y5NKqcP6eY)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[Discord](https://discord.gg/y5NKqcP6eY)
+[License](LICENSE)
 
 # DeskClaw
 
@@ -37,6 +37,7 @@ Instant expansion of operating capacity. One-click deployment of AI operating pa
 - **Gene System** -- Modular capability investment: load new business dimensions onto AI partners from a public or private marketplace
 - **One-Click Scale** -- Expand your operating capacity end-to-end, with SSE real-time progress streaming
 - **Multi-Cluster Operations** -- Cross-cluster orchestration, health checks, and elastic scaling across your business footprint
+
 ## Architecture
 
 ```mermaid
@@ -96,6 +97,8 @@ flowchart LR
     end
 ```
 
+
+
 ### Project Layout
 
 ```
@@ -128,13 +131,15 @@ Requires a K8s cluster, a container registry, and an external PostgreSQL databas
 
 #### Prerequisites
 
-| Dependency | |
-|---|---|
-| Kubernetes cluster | 1.24+ with Ingress Controller (e.g. ingress-nginx) |
+
+| Dependency         |                                                         |
+| ------------------ | ------------------------------------------------------- |
+| Kubernetes cluster | 1.24+ with Ingress Controller (e.g. ingress-nginx)      |
 | Container registry | Any Docker V2 registry (Docker Hub, AWS ECR, GCR, etc.) |
-| PostgreSQL | External database (e.g. AWS RDS, GCP Cloud SQL) |
-| kubectl | Configured with access to your cluster |
-| Docker | For building images locally |
+| PostgreSQL         | External database (e.g. AWS RDS, GCP Cloud SQL)         |
+| kubectl            | Configured with access to your cluster                  |
+| Docker             | For building images locally                             |
+
 
 #### 1. Configure Registry & Context
 
@@ -187,10 +192,12 @@ kubectl --context <CTX> -n <NS> apply -f deploy/k8s/ingress.yaml
 
 The Ingress defines two hosts (configure as needed):
 
-| Ingress | Default host | Backend service |
-|---|---|---|
-| Portal | `console.example.com` | portal (80) + backend API (8000) |
-| LLM Proxy | `llm-proxy.example.com` | llm-proxy (80) |
+
+| Ingress   | Default host            | Backend service                  |
+| --------- | ----------------------- | -------------------------------- |
+| Portal    | `console.example.com`   | portal (80) + backend API (8000) |
+| LLM Proxy | `llm-proxy.example.com` | llm-proxy (80)                   |
+
 
 See [deploy/README.md](deploy/README.md) for full CLI reference, image tagging, and the release/promote workflow.
 
@@ -198,11 +205,13 @@ See [deploy/README.md](deploy/README.md) for full CLI reference, image tagging, 
 
 #### Prerequisites
 
-| Dependency | |
-|---|---|
-| Python >= 3.12 + [uv](https://docs.astral.sh/uv/) | Backend runtime & package manager |
-| Node.js >= 18 + npm | Frontend runtime |
-| PostgreSQL | Database (or use `--docker-pg` below) |
+
+| Dependency                                        |                                       |
+| ------------------------------------------------- | ------------------------------------- |
+| Python >= 3.12 + [uv](https://docs.astral.sh/uv/) | Backend runtime & package manager     |
+| Node.js >= 18 + npm                               | Frontend runtime                      |
+| PostgreSQL                                        | Database (or use `--docker-pg` below) |
+
 
 #### 1. Configure
 
@@ -224,8 +233,7 @@ The script handles dependency installation, starts all services with colored log
 
 Services: backend (4510) + llm-proxy (4511) + portal (4517)
 
-<details>
-<summary>Manual Start (alternative)</summary>
+Manual Start (alternative)
 
 **Backend:**
 
@@ -246,7 +254,7 @@ npm install && npm run dev
 
 Portal at `http://localhost:4517` | `/api` auto-proxy to backend.
 
-</details>
+
 
 #### 3. Sign In
 
@@ -319,14 +327,16 @@ Available presets are in `deploy/mirrors/`. See [deploy/mirrors/README.md](deplo
 
 ## Documentation
 
-| | |
-|---|---|
-| [Backend](nodeskclaw-backend/README.md) | API hub, directory layout, env vars |
-| [Portal](nodeskclaw-portal/README.md) | User portal frontend |
-| [Artifacts](nodeskclaw-artifacts/README.md) | DeskClaw image build & deploy manifests |
+
+|                                                         |                                              |
+| ------------------------------------------------------- | -------------------------------------------- |
+| [Backend](nodeskclaw-backend/README.md)                 | API hub, directory layout, env vars          |
+| [Portal](nodeskclaw-portal/README.md)                   | User portal frontend                         |
+| [Artifacts](nodeskclaw-artifacts/README.md)             | DeskClaw image build & deploy manifests      |
 | [Channel Plugin](openclaw-channel-nodeskclaw/README.md) | Cyber Workspace communication infrastructure |
-| [DingTalk Plugin](openclaw-channel-dingtalk/README.md) | DingTalk channel via Stream protocol |
-| [LLM Proxy](nodeskclaw-llm-proxy/README.md) | AI reasoning capability relay |
+| [DingTalk Plugin](openclaw-channel-dingtalk/README.md)  | DingTalk channel via Stream protocol         |
+| [LLM Proxy](nodeskclaw-llm-proxy/README.md)             | AI reasoning capability relay                |
+
 
 ## Community
 
@@ -334,7 +344,7 @@ Available presets are in `deploy/mirrors/`. See [deploy/mirrors/README.md](deplo
 - [GitHub Issues](https://github.com/NoDeskAI/nodeskclaw/issues) -- Bug reports and feature requests
 - WeChat -- Scan the QR code below to join the developer group; if the WeChat group is full, please use Discord above
 
-<img src=".github/wechat-group-qr.png" alt="DeskClaw WeChat Developer Group" width="280">
+
 
 ## Contributing
 
