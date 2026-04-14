@@ -448,6 +448,13 @@ async def update_task(
             _fire_task(_notify_agents_task_done(workspace_id, task_info.title))
         elif new_status == "failed":
             _fire_task(_notify_agents_task_failed(workspace_id, task_info.title))
+        if new_status in ("done", "failed") and task_info.schedule_id:
+            from app.services.workspace_service import update_schedule_failure_count
+            await update_schedule_failure_count(
+                db, task_info.schedule_id,
+                success=(new_status == "done"), workspace_id=workspace_id,
+            )
+            await db.commit()
         if new_status in ("done", "failed") and task_info.assignee_instance_id:
             try:
                 from app.services import gene_service
@@ -457,6 +464,7 @@ async def update_task(
                     task_id,
                     task_info.title,
                     success=(new_status == "done"),
+                    failure_reason=task_info.failure_reason,
                 )
             except Exception as e:
                 logger.warning("写入 task_success 效果日志失败: %s", e)
