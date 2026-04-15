@@ -363,7 +363,10 @@ async def check_topology_access(
 async def check_blackboard_access(
     workspace_id: str, caller_node_id: str, db: AsyncSession,
 ) -> tuple[bool, str]:
-    return await check_topology_access(workspace_id, caller_node_id, 0, 0, db)
+    allowed, reason = await check_topology_access(workspace_id, caller_node_id, 0, 0, db)
+    if not allowed and reason == "target_unreachable":
+        reason = "blackboard_unreachable"
+    return allowed, reason
 
 
 async def get_topology(workspace_id: str, db: AsyncSession) -> Topology:
