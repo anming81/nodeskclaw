@@ -81,6 +81,25 @@ function jsonResult(payload: unknown) {
   };
 }
 
+async function bbApiFetch(
+  cfg: ToolConfig, path: string, method = "GET", body?: unknown,
+): Promise<unknown> {
+  const result = await apiFetch(cfg, path, method, body);
+  if (typeof result === "object" && result !== null && (result as Record<string, unknown>).status === 403) {
+    try {
+      const parsed = JSON.parse(String((result as Record<string, unknown>).message) || "{}");
+      if (parsed?.detail?.message_key?.startsWith("errors.topology.")) {
+        return {
+          error: "topology_unreachable",
+          message: "You are not connected to the blackboard via corridor topology. "
+            + "Use nodeskclaw_topology get_my_neighbors to check your reachable nodes.",
+        };
+      }
+    } catch { /* non-JSON body, fall through */ }
+  }
+  return result;
+}
+
 function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
   return {
     name: "nodeskclaw_blackboard",
@@ -131,24 +150,24 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
       const ws = cfg.workspaceId;
       switch (p.action) {
         case "get_blackboard":
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard`));
         case "update_blackboard":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard`, "PUT", { content: p.content }),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard`, "PUT", { content: p.content }),
           );
         case "patch_section":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/sections`, "PATCH", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/sections`, "PATCH", {
               section: p.section, content: p.content,
             }),
           );
         case "list_tasks": {
           const statusFilter = p.filter_status ? `?status=${p.filter_status}` : "";
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks${statusFilter}`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/tasks${statusFilter}`));
         }
         case "create_task":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks`, "POST", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/tasks`, "POST", {
               title: p.title,
               description: p.description,
               priority: p.priority,
@@ -168,18 +187,18 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
           if (p.blocker_reason !== undefined) body.blocker_reason = p.blocker_reason;
           if (p.estimated_value !== undefined) body.estimated_value = p.estimated_value;
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/tasks/${p.task_id}`, "PUT", body),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/tasks/${p.task_id}`, "PUT", body),
           );
         }
         case "list_objectives":
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/objectives`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/objectives`));
         case "create_objective": {
           const body: Record<string, unknown> = { title: p.title };
           if (p.description !== undefined) body.description = p.description;
           if (p.obj_type !== undefined) body.obj_type = p.obj_type;
           if (p.parent_id !== undefined) body.parent_id = p.parent_id;
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/objectives`, "POST", body),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/objectives`, "POST", body),
           );
         }
         case "update_objective": {
@@ -190,25 +209,25 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
           if (p.obj_type !== undefined) body.obj_type = p.obj_type;
           if (p.parent_id !== undefined) body.parent_id = p.parent_id;
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/objectives/${p.objective_id}`, "PUT", body),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/objectives/${p.objective_id}`, "PUT", body),
           );
         }
         case "list_posts": {
           const pg = p.page ? `?page=${p.page}` : "";
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts${pg}`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts${pg}`));
         }
         case "create_post":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts`, "POST", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts`, "POST", {
               title: p.title,
               content: p.content,
             }),
           );
         case "get_post":
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`));
         case "reply_post":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/replies`, "POST", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/replies`, "POST", {
               content: p.content,
             }),
           );
@@ -217,20 +236,20 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
           if (p.title !== undefined) body.title = p.title;
           if (p.content !== undefined) body.content = p.content;
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`, "PUT", body),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`, "PUT", body),
           );
         }
         case "delete_post":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`, "DELETE"),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}`, "DELETE"),
           );
         case "pin_post":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/pin`, "POST"),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/pin`, "POST"),
           );
         case "unpin_post":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/pin`, "DELETE"),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/pin`, "DELETE"),
           );
         default:
           return jsonResult({ error: `Unknown action: ${p.action}` });
@@ -481,13 +500,13 @@ function createSharedFilesTool(cfg: ToolConfig): AnyAgentTool {
       switch (p.action) {
         case "list_files": {
           const pp = p.parent_path ? `?parent_path=${encodeURIComponent(p.parent_path as string)}` : "";
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/files${pp}`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files${pp}`));
         }
         case "read_file":
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}/content`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}/content`));
         case "write_file":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/files/upload`, "POST", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files/upload`, "POST", {
               parent_path: p.parent_path || "/",
               filename: p.filename,
               content: p.content,
@@ -496,17 +515,17 @@ function createSharedFilesTool(cfg: ToolConfig): AnyAgentTool {
           );
         case "delete_file":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}`, "DELETE"),
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}`, "DELETE"),
           );
         case "mkdir":
           return jsonResult(
-            await apiFetch(cfg, `/workspaces/${ws}/blackboard/files/mkdir`, "POST", {
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files/mkdir`, "POST", {
               parent_path: p.parent_path || "/",
               name: p.name,
             }),
           );
         case "get_file_url":
-          return jsonResult(await apiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}/url`));
+          return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files/${p.file_id}/url`));
         default:
           return jsonResult({ error: `Unknown action: ${p.action}` });
       }
