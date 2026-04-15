@@ -247,14 +247,14 @@ class RoutingMiddleware(MessageMiddleware):
         else:
             from app.services.runtime.route_cache import route_table
 
-            resolved = route_table.get(ctx.workspace_id)
+            resolved = route_table.get(ctx.workspace_id, sender_id)
             if resolved is None and db is not None:
                 resolved = await _resolve_broadcast(
                     ctx.workspace_id, db,
                     sender_id=sender_id, sender_type=data.sender.type,
                     max_hops=max_hops, visited=visited_list,
                 )
-                route_table.put(ctx.workspace_id, resolved)
+                route_table.put(ctx.workspace_id, resolved, sender_id)
             resolved = resolved or []
             resolved = [t for t in resolved if t.node_id != sender_id]
 
