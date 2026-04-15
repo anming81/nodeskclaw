@@ -274,6 +274,8 @@ async def get_blackboard(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_member(workspace_id, user, db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     bb = await workspace_service.get_blackboard(db, workspace_id)
     if bb is None:
         raise _error(404, 40433, "errors.workspace.blackboard_not_found", "黑板不存在")
@@ -288,6 +290,8 @@ async def update_blackboard(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     bb = await workspace_service.update_blackboard(db, workspace_id, data)
     if bb is None:
         raise _error(404, 40433, "errors.workspace.blackboard_not_found", "黑板不存在")
@@ -302,6 +306,8 @@ async def patch_blackboard_section(
     user=Depends(_get_current_user_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     bb = await workspace_service.patch_blackboard_section(db, workspace_id, data)
     if bb is None:
         raise _error(404, 40433, "errors.workspace.blackboard_not_found", "黑板不存在")
@@ -393,6 +399,8 @@ async def list_tasks(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_member(workspace_id, user, db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     if paginated:
         items, total = await workspace_service.list_tasks_paginated(
             db,
@@ -418,6 +426,8 @@ async def create_task(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     task = await workspace_service.create_task(db, workspace_id, data)
     broadcast_event(workspace_id, "task:created", task.model_dump(mode="json"))
     return _ok(task.model_dump(mode="json"))
@@ -432,6 +442,8 @@ async def update_task(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     result = await workspace_service.update_task(db, workspace_id, task_id, data)
     if result is None:
         raise _error(404, 40434, "errors.workspace.task_not_found", "任务不存在")
@@ -479,6 +491,8 @@ async def archive_task(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     task = await workspace_service.archive_task(db, workspace_id, task_id)
     if task is None:
         raise _error(404, 40434, "errors.workspace.task_not_found", "任务不存在")
@@ -494,6 +508,8 @@ async def list_objectives(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_member(workspace_id, user, db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     objs = await workspace_service.list_objectives(db, workspace_id)
     return _ok([o.model_dump(mode="json") for o in objs])
 
@@ -506,6 +522,8 @@ async def create_objective(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     obj = await workspace_service.create_objective(db, workspace_id, data, user.id)
     broadcast_event(workspace_id, "objective:created", obj.model_dump(mode="json"))
     return _ok(obj.model_dump(mode="json"))
@@ -520,6 +538,8 @@ async def update_objective(
     user=Depends(_get_current_user_or_agent_dep()),
 ):
     await wm_service.check_workspace_access(workspace_id, user, "edit_blackboard", db)
+    from app.api.blackboard import _enforce_agent_blackboard_topology
+    await _enforce_agent_blackboard_topology(workspace_id, db)
     obj = await workspace_service.update_objective(db, workspace_id, objective_id, data)
     if obj is None:
         raise _error(404, 40435, "errors.workspace.objective_not_found", "目标不存在")
