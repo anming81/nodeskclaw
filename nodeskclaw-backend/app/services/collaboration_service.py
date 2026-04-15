@@ -89,6 +89,24 @@ async def handle_collaboration_message(
             target_inst = await _find_agent_by_name_or_id(db, workspace_id, target[6:])
             if target_inst:
                 resolved_target_id = target_inst.id
+                from app.services import corridor_router
+                target_hex = await corridor_router.get_agent_hex_in_workspace(
+                    target_inst.id, workspace_id, db,
+                )
+                if target_hex is not None:
+                    allowed, reason = await corridor_router.check_topology_access(
+                        workspace_id, source_instance_id,
+                        target_hex[0], target_hex[1], db,
+                    )
+                    if not allowed:
+                        from app.api.workspaces import broadcast_event
+                        broadcast_event(workspace_id, "agent:topology_blocked", {
+                            "source_instance_id": source_instance_id,
+                            "source_name": source_name,
+                            "target": target,
+                            "reason": reason,
+                        })
+                        return
         elif target.startswith("human:"):
             human_name = target[6:]
             hh = await _find_human_by_display_name(db, workspace_id, human_name)
