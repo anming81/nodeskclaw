@@ -331,6 +331,41 @@ async def can_reach(
     return False
 
 
+async def check_topology_access(
+    workspace_id: str,
+    caller_node_id: str,
+    target_hex_q: int,
+    target_hex_r: int,
+    db: AsyncSession,
+) -> tuple[bool, str]:
+    if not await has_any_connections(workspace_id, db):
+        return True, "no_topology"
+
+    card_q = await db.execute(
+        select(NodeCard.hex_q, NodeCard.hex_r).where(
+            NodeCard.node_id == caller_node_id,
+            NodeCard.workspace_id == workspace_id,
+            not_deleted(NodeCard),
+        ).limit(1)
+    )
+    row = card_q.first()
+    if row is None:
+        return False, "caller_not_on_topology"
+
+    reachable = await can_reach(
+        workspace_id, row.hex_q, row.hex_r, target_hex_q, target_hex_r, db,
+    )
+    if not reachable:
+        return False, "target_unreachable"
+    return True, "ok"
+
+
+async def check_blackboard_access(
+    workspace_id: str, caller_node_id: str, db: AsyncSession,
+) -> tuple[bool, str]:
+    return await check_topology_access(workspace_id, caller_node_id, 0, 0, db)
+
+
 async def get_topology(workspace_id: str, db: AsyncSession) -> Topology:
     hex_map = await _build_hex_map(workspace_id, db)
 
