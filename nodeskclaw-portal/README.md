@@ -84,13 +84,8 @@ vue-tsc -b       # 类型检查
 
 组织管理员可在"组织设置 > 集群"页面配置 Kubernetes 集群连接。
 
-- 底层按多集群设计，数据模型和 Store 支持多集群
-- FeatureGate `multi_cluster` 未开启时，后端限制最多 1 个集群（ConflictError）
-- 前端通过 `useFeature("multi_cluster")` 静默切换显示模式：
-  - `multi_cluster` 开启 → 多集群列表 + 添加按钮
-  - 未开启但集群数 > 1（EE 降级兼容）→ 多集群列表，无添加按钮
-  - 未开启且集群数 = 1 → 单集群摘要卡片
-  - 集群数 = 0 → 配置向导
+- CE 和 EE 均支持多集群，无数量限制
+- 集群数 = 0 时显示配置向导，有集群时显示集群列表
 - 集群详情页（`/clusters/:id`）：资源概览、节点列表、IngressClass 选择、StorageClass 列表
 - 所有用户可见文案不出现 CE/EE/升级 等字眼
 

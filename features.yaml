@@ -50,10 +50,6 @@ edition_features:
       description: 组织级 AKR 汇总老板视图
 
     # ── 未来功能（代码将在 ee/ 仓库中新增） ──
-    - id: multi_cluster
-      name: Multi-Cluster Management
-      description: 多 K8s 集群部署 + 跨集群网关代理
-
     - id: advanced_audit
       name: Advanced Operation Audit
       description: 全局操作审计中间件 + 查询导出

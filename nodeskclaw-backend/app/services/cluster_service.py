@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
-from app.core.feature_gate import feature_gate
+
 from app.core.security import decrypt_kubeconfig, encrypt_kubeconfig
 from app.models.cluster import Cluster, ClusterStatus
 from app.models.corridor import HexConnection
@@ -37,16 +37,6 @@ async def create_cluster(
 ) -> ClusterInfo:
     """统一集群创建入口，根据 compute_provider 分支处理 k8s / docker。"""
     compute = data.compute_provider or "k8s"
-
-    if not feature_gate.is_enabled("multi_cluster"):
-        count_result = await db.execute(
-            select(func.count(Cluster.id)).where(Cluster.deleted_at.is_(None))
-        )
-        if count_result.scalar_one() >= 1:
-            raise ConflictError(
-                message="已配置集群，当前仅支持单集群",
-                message_key="errors.cluster.single_cluster_limit",
-            )
 
     name_query = select(Cluster).where(
         Cluster.name == data.name, Cluster.deleted_at.is_(None),
