@@ -93,7 +93,10 @@ async def create_workspace(
     db: AsyncSession = Depends(get_db),
 ):
     user, org = org_ctx
-    ws = await workspace_service.create_workspace(db, org.id, user.id, data)
+    try:
+        ws = await workspace_service.create_workspace(db, org.id, user.id, data)
+    except ValueError as e:
+        raise _error(400, 40034, "errors.workspace.create_invalid", str(e))
     await hooks.emit("operation_audit", action="workspace.created", target_type="workspace", target_id=getattr(ws, "id", "") or "", actor_id=user.id, org_id=org.id)
     return _ok(ws.model_dump(mode="json"))
 

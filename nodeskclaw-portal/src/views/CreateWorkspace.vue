@@ -201,6 +201,7 @@ async function handleCreate() {
                 </span>
                 <span v-else class="text-muted-foreground">{{ t('createWorkspace.clusterPlaceholder') }}</span>
               </button>
+              <div v-if="clusterDropdownOpen" class="fixed inset-0 z-0" @click="clusterDropdownOpen = false" />
               <div
                 v-if="clusterDropdownOpen"
                 class="absolute z-10 mt-1 w-full rounded-lg border border-border bg-popover shadow-md"
