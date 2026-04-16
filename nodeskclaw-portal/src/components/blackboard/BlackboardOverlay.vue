@@ -11,7 +11,6 @@ import SchedulePanel from './SchedulePanel.vue'
 import RoiDashboard from './RoiDashboard.vue'
 import AgentPerformancePanel from './AgentPerformancePanel.vue'
 import TokenUsagePanel from './TokenUsagePanel.vue'
-import TopologyGraph from './TopologyGraph.vue'
 import PostList from './PostList.vue'
 import PostDetail from './PostDetail.vue'
 import SharedFileBrowser from './SharedFileBrowser.vue'
@@ -29,7 +28,7 @@ const { t } = useI18n()
 const store = useWorkspaceStore()
 const { isEnabled: isPerformanceEnabled } = useFeature('performance_analytics')
 
-type TabKey = 'objectives-tasks' | 'status' | 'notes-perf' | 'topology' | 'posts' | 'files'
+type TabKey = 'objectives-tasks' | 'status' | 'notes-perf' | 'posts' | 'files'
 const activeTab = ref<TabKey>('objectives-tasks')
 
 const tabs: { key: TabKey; labelKey: string }[] = [
@@ -38,7 +37,6 @@ const tabs: { key: TabKey; labelKey: string }[] = [
   { key: 'files', labelKey: 'blackboard.tabFiles' },
   { key: 'status', labelKey: 'blackboard.tabStatus' },
   { key: 'notes-perf', labelKey: 'blackboard.tabNotesPerf' },
-  { key: 'topology', labelKey: 'blackboard.tabTopology' },
 ]
 
 const editing = ref(false)
@@ -60,8 +58,6 @@ const notesHtml = computed(() => renderMd(fullContent.value))
 
 const agents = computed(() => store.currentWorkspace?.agents || [])
 const members = computed(() => store.members)
-const topoNodes = computed(() => store.topology?.nodes || [])
-const topoEdges = computed(() => store.topology?.edges || [])
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
@@ -159,7 +155,7 @@ const canEditTab = computed(() => activeTab.value === 'notes-perf')
           </button>
         </div>
 
-        <div :class="['flex-1 min-h-0', activeTab === 'topology' ? 'overflow-hidden' : 'overflow-y-auto px-5 py-4']">
+        <div class="flex-1 min-h-0 overflow-y-auto px-5 py-4">
 
           <template v-if="activeTab === 'objectives-tasks'">
             <div class="space-y-6">
@@ -241,13 +237,6 @@ const canEditTab = computed(() => activeTab.value === 'notes-perf')
 
           <template v-if="activeTab === 'files'">
             <SharedFileBrowser :workspace-id="workspaceId" />
-          </template>
-
-          <template v-if="activeTab === 'topology'">
-            <div v-if="topoNodes.length === 0" class="px-5 py-4 text-muted-foreground text-sm">
-              {{ t('blackboard.noTopology') }}
-            </div>
-            <TopologyGraph v-else :nodes="topoNodes" :edges="topoEdges" />
           </template>
 
         </div>
