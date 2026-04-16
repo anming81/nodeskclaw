@@ -23,6 +23,7 @@ const props = defineProps<{
   workspaceId: string
   targetHexQ?: number
   targetHexR?: number
+  clusterId?: string
 }>()
 
 const emit = defineEmits<{
@@ -112,7 +113,9 @@ watch(() => props.visible, (val) => {
 async function fetchInstances() {
   loading.value = true
   try {
-    const res = await api.get('/instances')
+    const params: Record<string, string> = {}
+    if (props.clusterId) params.cluster_id = props.clusterId
+    const res = await api.get('/instances', { params })
     instances.value = (res.data.data || []).map((i: any) => ({
       id: i.id,
       name: i.name,
@@ -229,7 +232,7 @@ async function doAddAgent(instanceId: string, installSlugs: string[]) {
           <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <button
               class="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors"
-              @click="router.push(`/instances/create?workspace=${workspaceId}`)"
+              @click="router.push(`/instances/create?workspace=${workspaceId}${clusterId ? `&cluster=${clusterId}` : ''}`)"
             >
               <Rocket class="w-5 h-5 text-primary" />
               <div class="text-left">

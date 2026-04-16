@@ -22,6 +22,7 @@ export interface WorkspaceListItem {
   description: string
   color: string
   icon: string
+  cluster_id?: string
   agent_count: number
   agents: AgentBrief[]
   created_at: string
@@ -35,6 +36,7 @@ export interface WorkspaceInfo {
   color: string
   icon: string
   created_by: string
+  cluster_id?: string
   agent_count: number
   agents: AgentBrief[]
   created_at: string

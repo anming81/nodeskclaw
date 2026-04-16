@@ -1463,6 +1463,7 @@ function handleKeydown(e: KeyboardEvent) {
       :workspace-id="workspaceId"
       :target-hex-q="addAgentHexQ"
       :target-hex-r="addAgentHexR"
+      :cluster-id="store.currentWorkspace?.cluster_id"
       @added="onAgentAdded"
     />
 
