@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import yaml
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -106,6 +107,48 @@ class OpenClawConfigAdapter(RuntimeConfigAdapter):
             "mattermost", "bluebubbles", "nextcloud-talk", "imessage",
             "line", "nostr", "tlon", "twitch", "synology-chat",
             "zalo", "zalouser",
+        ]
+
+    def translate_to_runtime(self, canonical: dict, channel_id: str) -> dict:
+        return canonical
+
+    def translate_from_runtime(self, native: dict, channel_id: str) -> dict:
+        return native
+
+
+class HermesConfigAdapter(RuntimeConfigAdapter):
+
+    _CONFIG_REL = ".hermes/config.yaml"
+
+    async def read_config(self, fs: RemoteFS) -> dict | None:
+        raw = await fs.read_text(self._CONFIG_REL)
+        if raw is None:
+            return None
+        try:
+            parsed = yaml.safe_load(raw)
+        except yaml.YAMLError as e:
+            raise ValueError(f"hermes config.yaml 格式无法解析: {e}") from e
+        return parsed if isinstance(parsed, dict) else {}
+
+    async def write_config(self, fs: RemoteFS, data: dict) -> None:
+        await fs.write_text(self._CONFIG_REL, yaml.safe_dump(data, allow_unicode=True, sort_keys=False))
+
+    def extract_channels(self, config: dict) -> dict:
+        channels = config.get("channels")
+        if isinstance(channels, dict):
+            return channels
+        return {}
+
+    def merge_channels(self, config: dict, channels: dict) -> dict:
+        config["channels"] = channels
+        return config
+
+    async def restart(self, instance: Instance, db: AsyncSession) -> dict:
+        return await _restart_container(instance, db)
+
+    def supported_channels(self) -> list[str]:
+        return [
+            "telegram", "discord", "slack", "matrix", "dingtalk", "feishu",
         ]
 
     def translate_to_runtime(self, canonical: dict, channel_id: str) -> dict:
@@ -232,6 +275,7 @@ async def _restart_container(instance: Instance, db: AsyncSession) -> dict:
 _ADAPTERS: dict[str, RuntimeConfigAdapter] = {
     "openclaw": OpenClawConfigAdapter(),
     "nanobot": NanobotConfigAdapter(),
+    "hermes": HermesConfigAdapter(),
 }
 
 

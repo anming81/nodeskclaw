@@ -7,6 +7,7 @@ export interface RuntimeCapabilities {
 
 const CAPS: Record<string, RuntimeCapabilities> = {
   openclaw: { genes: true, evolutionLog: true, llmConfig: true, dataRoot: '.openclaw' },
+  hermes: { genes: false, evolutionLog: false, llmConfig: false, dataRoot: '.hermes' },
   nanobot: { genes: false, evolutionLog: false, llmConfig: false, dataRoot: '.nanobot' },
 }
 

@@ -50,6 +50,7 @@ function runtimeBadgeText(ch: AvailableChannel): string | null {
   if (runtimes.size === 0 || runtimes.size >= 3) return null
   const labels: Record<string, string> = {
     openclaw: 'OpenClaw',
+    hermes: 'Hermes Agent',
     nanobot: 'NanoBot',
   }
   return [...runtimes].map(r => labels[r] || r).join(' / ')
