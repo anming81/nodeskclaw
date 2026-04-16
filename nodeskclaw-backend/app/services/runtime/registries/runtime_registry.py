@@ -101,7 +101,7 @@ def _register_builtins() -> None:
         display_tags=("新",),
         display_powered_by="Hermes Agent",
         gateway_port=18791,
-        health_probe_path="/health",
+        health_probe_path=None,
         order=1,
         image_registry_key="image_registry_hermes",
         config_rel_path=".hermes/config.yaml",

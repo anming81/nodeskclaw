@@ -18,7 +18,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
     ca-certificates curl gettext-base && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "hermes-agent==${HERMES_VERSION}"
+RUN pip install --no-cache-dir "hermes-agent[messaging]==${HERMES_VERSION}"
 
 COPY config.yaml.template /opt/hermes/config.yaml.template
 COPY docker-entrypoint.sh /opt/hermes/docker-entrypoint.sh
@@ -30,4 +30,4 @@ EXPOSE 18791
 WORKDIR /opt/hermes
 
 ENTRYPOINT ["/opt/hermes/docker-entrypoint.sh"]
-CMD ["hermes", "gateway", "setup", "--all", "--non-interactive"]
+CMD ["hermes", "gateway", "run"]
