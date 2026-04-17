@@ -154,6 +154,11 @@ class Settings(BaseSettings):
     # ── 本地文件存储（S3 未配置时自动启用）─────────────────
     LOCAL_STORAGE_DIR: str = ""
 
+    # ── 匿名安装遥测（CE-only）─────────────────────────────
+    TELEMETRY_ENABLED: bool = True
+    POSTHOG_HOST: str = "https://us.i.posthog.com"
+    POSTHOG_API_KEY: str = "phc_qdVoTVCcHEzgwhZVwtPuu6BeoTJPGNQskeUBcXVxnxuF"
+
     # ── CORS ─────────────────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:4517", "http://localhost:4518"]
 

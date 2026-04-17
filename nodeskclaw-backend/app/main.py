@@ -795,6 +795,25 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(_run_startup_plugin_sync())
 
+    # ── 匿名安装遥测（CE-only，一次性上报到 PostHog）──
+    async def _run_telemetry():
+        try:
+            async with async_session_factory() as db:
+                from app.services import telemetry_service
+                await telemetry_service.report_installation_once(db)
+        except Exception as e:
+            logger.warning("遥测上报失败（非致命）: %s", e)
+
+    if _fg.is_ee:
+        logger.info("遥测已跳过 (EE 模式)")
+    elif not settings.TELEMETRY_ENABLED:
+        logger.info("遥测已关闭 (TELEMETRY_ENABLED=false)")
+    elif not settings.POSTHOG_API_KEY:
+        logger.info("遥测已跳过 (POSTHOG_API_KEY 未配置)")
+    else:
+        logger.info("遥测启用，将在后台上报匿名安装信息")
+        _telemetry_task = asyncio.create_task(_run_telemetry())
+
     yield
 
     # ── Security Pipeline 销毁 ────────────────────────
