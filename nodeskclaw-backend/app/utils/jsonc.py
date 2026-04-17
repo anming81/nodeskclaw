@@ -60,6 +60,7 @@ def deep_merge_config(base: dict, patch: dict) -> dict:
 _CHANNEL_PLUGIN_PATHS: dict[str, str] = {
     "nodeskclaw": "/root/.openclaw/extensions/openclaw-channel-nodeskclaw",
     "learning": "/root/.openclaw/extensions/openclaw-channel-learning",
+    "wecom": "/root/.openclaw/extensions/openclaw-channel-wecom",
 }
 
 

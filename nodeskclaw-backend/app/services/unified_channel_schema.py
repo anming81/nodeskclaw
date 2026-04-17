@@ -302,6 +302,53 @@ UNIFIED_CHANNEL_REGISTRY: dict[str, ChannelDefinition] = {
             ),
         ),
     ),
+
+    # ── WeCom / 企业微信 ────────────────────────────────────
+    "wecom": ChannelDefinition(
+        label="WeCom / 企业微信",
+        supported_runtimes=("openclaw",),
+        order=37,
+        fields=(
+            FieldDef(
+                key="enabled", label="Enabled（启用开关）", type="boolean", required=False,
+                default=False, runtime_key={"openclaw": "enabled"},
+            ),
+            FieldDef(
+                key="connectionMode", label="Connection Mode（连接模式）", type="select",
+                required=False, default="websocket",
+                options=(
+                    {"value": "websocket", "label": "websocket（长连接）"},
+                    {"value": "webhook", "label": "webhook（回调）"},
+                ),
+                runtime_key={"openclaw": "connectionMode"},
+            ),
+            FieldDef(
+                key="botId", label="Bot ID（智能体 ID）", type="string", required=False,
+                placeholder="企业微信智能体 Bot ID",
+                runtime_key={"openclaw": "botId"},
+            ),
+            FieldDef(
+                key="secret", label="Secret（智能体密钥）", type="password", required=False,
+                placeholder="企业微信智能体 Secret",
+                runtime_key={"openclaw": "secret"},
+            ),
+            FieldDef(
+                key="token", label="Token（回调令牌）", type="string", required=False,
+                placeholder="Webhook 模式 Token",
+                runtime_key={"openclaw": "token"},
+            ),
+            FieldDef(
+                key="encodingAESKey", label="Encoding AES Key（消息加密密钥）", type="password",
+                required=False, placeholder="Webhook 模式 EncodingAESKey",
+                runtime_key={"openclaw": "encodingAESKey"},
+            ),
+            FieldDef(
+                key="receiveId", label="Receive ID（接收方 ID）", type="string", required=False,
+                placeholder="Webhook 模式 receiveId",
+                runtime_key={"openclaw": "receiveId"},
+            ),
+        ),
+    ),
 }
 
 
