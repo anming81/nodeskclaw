@@ -384,6 +384,19 @@ async def lifespan(app: FastAPI):
                         continue
                     _tpl = _seed_json.loads(_tpl_path.read_text())
                     _slug = _tpl["slug"]
+
+                    _manifest = _tpl.get("manifest", {})
+                    if "scripts" in _manifest and isinstance(_manifest["scripts"], list):
+                        _scripts_dict = {}
+                        _scripts_dir = _seed_dir.parent / "gene_scripts"
+                        for _sname in _manifest["scripts"]:
+                            _spath = _scripts_dir / _sname
+                            if _spath.exists():
+                                _scripts_dict[_sname] = _spath.read_text()
+                            else:
+                                logger.warning("Seed missing script: %s for %s", _sname, _slug)
+                        _manifest["scripts"] = _scripts_dict
+
                     _existing = (await _seed_db.execute(
                         select(_SeedGene).where(_SeedGene.slug == _slug, _seed_not_deleted(_SeedGene))
                     )).scalar_one_or_none()
@@ -396,14 +409,14 @@ async def lifespan(app: FastAPI):
                             tags=_seed_json.dumps(_tpl.get("tags", []), ensure_ascii=False),
                             source="official",
                             version="1.0.0",
-                            manifest=_seed_json.dumps(_tpl.get("manifest", {}), ensure_ascii=False),
+                            manifest=_seed_json.dumps(_manifest, ensure_ascii=False),
                             is_published=True,
                             review_status="approved",
                             source_registry="local",
                         ))
                         _seeded_genes += 1
                     else:
-                        _new_manifest = _seed_json.dumps(_tpl.get("manifest", {}), ensure_ascii=False)
+                        _new_manifest = _seed_json.dumps(_manifest, ensure_ascii=False)
                         if _existing.manifest != _new_manifest:
                             _existing.manifest = _new_manifest
                             _updated_genes += 1

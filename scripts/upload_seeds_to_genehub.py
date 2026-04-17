@@ -125,7 +125,19 @@ def build_gene_manifest(tpl: dict) -> dict:
     if "tool_allow" in inner:
         manifest["tool_allow"] = inner["tool_allow"]
     if "scripts" in inner:
-        manifest["scripts"] = inner["scripts"]
+        scripts = inner["scripts"]
+        if isinstance(scripts, list):
+            scripts_dict = {}
+            scripts_dir = TEMPLATES_DIR.parent / "gene_scripts"
+            for name in scripts:
+                script_path = scripts_dir / name
+                if script_path.exists():
+                    scripts_dict[name] = script_path.read_text()
+                else:
+                    print(f"Warning: Script {name} not found at {script_path}")
+            manifest["scripts"] = scripts_dict
+        else:
+            manifest["scripts"] = scripts
     return manifest
 
 

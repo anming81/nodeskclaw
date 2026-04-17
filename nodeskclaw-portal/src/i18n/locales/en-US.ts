@@ -890,6 +890,8 @@ const enUS = {
     slugConflict: "This slug is already taken",
     slugRule: "Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens, with at least 2 characters",
     slugHint: "Generated from the name by default, but you can edit it manually",
+    clusterLabel: "Target Cluster",
+    clusterHint: "The AI worker will be deployed to this cluster",
     specLabel: "Select Spec",
     specSmallLabel: "Small",
     specSmallDesc: "Weekly reports, research, and daily Q&A",

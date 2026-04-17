@@ -1432,14 +1432,17 @@ async def _apply_manifest_actions(
         await adapter.allow_tools(fs, tool_allow)
 
     scripts = manifest.get("scripts")
-    if scripts and isinstance(scripts, list):
+    if scripts and isinstance(scripts, (list, dict)):
         await _deploy_gene_scripts(fs, scripts, adapter)
 
 
 async def _deploy_gene_scripts(
-    fs: RemoteFS, script_names: list[str], adapter: GeneInstallAdapter,
+    fs: RemoteFS, scripts: list[str] | dict[str, str], adapter: GeneInstallAdapter,
 ) -> None:
-    """Load script files from gene_scripts directory and deploy them via adapter."""
+    """Deploy script files to the instance via adapter.
+
+    Supports old format (list of filenames to load locally) and new format (dict of filename to content).
+    """
     from pathlib import Path
 
     scripts_dir = Path(__file__).resolve().parent.parent / "data" / "gene_scripts"
@@ -1449,12 +1452,16 @@ async def _deploy_gene_scripts(
     if api_client_path.exists():
         scripts_to_deploy["_api_client.py"] = api_client_path.read_text()
 
-    for name in script_names:
-        script_path = scripts_dir / name
-        if script_path.exists():
-            scripts_to_deploy[name] = script_path.read_text()
-        else:
-            logger.warning("Gene script not found: %s", name)
+    if isinstance(scripts, dict):
+        for name, content in scripts.items():
+            scripts_to_deploy[name] = content
+    else:
+        for name in scripts:
+            script_path = scripts_dir / name
+            if script_path.exists():
+                scripts_to_deploy[name] = script_path.read_text()
+            else:
+                logger.warning("Gene script not found: %s", name)
 
     if scripts_to_deploy:
         await adapter.deploy_scripts(fs, scripts_to_deploy)

@@ -41,7 +41,7 @@ gene_templates/
 |------|------|
 | `skill` | Skill 内容（name + content），安装时写入运行时的 skill 目录 |
 | `tool_allow` | 工具白名单，安装时由运行时适配器（GeneInstallAdapter）注册到对应运行时的配置中 |
-| `scripts` | Python 脚本文件名数组（如 `["deskclaw_blackboard.py"]`），安装时从 `gene_scripts/` 读取并部署到实例 |
+| `scripts` | Python 脚本字典 `{"filename.py": "content"}`（新版自包含格式）或文件名数组 `["filename.py"]`（旧版兼容，从 `gene_scripts/` 读取），安装时部署到实例。本目录的 JSON 模板为了简洁保持数组格式，启动时（Seed）会自动填充内容转为字典存入 DB。 |
 | `runtime_config` | 运行时配置补丁，安装时由适配器浅合并到运行时配置文件（向后兼容旧字段名 `openclaw_config`） |
 
 ## 分类

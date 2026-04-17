@@ -890,6 +890,8 @@ const zhCN = {
     slugConflict: "该标识已被占用",
     slugRule: "须以小写字母开头，仅含小写字母、数字和连字符，至少 2 个字符",
     slugHint: "根据名称自动生成，也可手动修改",
+    clusterLabel: "目标集群",
+    clusterHint: "AI 员工将部署到此集群",
     specLabel: "选择规格",
     specSmallLabel: "轻量",
     specSmallDesc: "写周报、查资料、日常问答",

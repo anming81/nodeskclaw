@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Loader2, Rocket, Database, ChevronDown, RefreshCw, AlertCircle, Check, Brain, Key, Trash2, Plus, Link, Star, X, Cpu, HardDrive, Zap, CheckCircle, XCircle } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, Loader2, Rocket, Database, ChevronDown, RefreshCw, AlertCircle, Check, Brain, Key, Trash2, Plus, Link, Star, X, Cpu, HardDrive, Zap, CheckCircle, XCircle, Server } from 'lucide-vue-next'
 import ModelSelect from '@/components/shared/ModelSelect.vue'
 import type { ModelItem } from '@/components/shared/ModelSelect.vue'
 import { pinyin } from 'pinyin-pro'
@@ -82,7 +82,7 @@ const slugTooLong = computed(() => fullSlug.value.length > 0 && (
 const canGoNext = computed(() =>
   !!name.value.trim() && !nameHasEdgeSpaces.value
   && !!slug.value && slugValid.value && !slugConflict.value && !slugChecking.value && !slugTooLong.value
-  && !!selectedImage.value && clusters.value.length > 0
+  && !!selectedImage.value && !!selectedCluster.value
 )
 
 // ── LLM config ──
@@ -270,6 +270,8 @@ interface EngineVersionItem {
 const engineVersions = ref<EngineVersionItem[]>([])
 const imageTags = computed(() => engineVersions.value.map(v => v.image_tag))
 const clusters = ref<{ id: string; name: string; compute_provider: string }[]>([])
+const selectedCluster = ref('')
+const clusterDropdownOpen = ref(false)
 const loadingInit = ref(true)
 const loadingTags = ref(false)
 const imageDropdownOpen = ref(false)
@@ -285,10 +287,8 @@ const selectedStorageClass = ref<string | null>(null)
 const scDropdownOpen = ref(false)
 const pvcAccessMode = ref<string>('ReadWriteOnce')
 
-const isK8sCluster = computed(() => {
-  const first = clusters.value[0]
-  return first && first.compute_provider === 'k8s'
-})
+const selectedClusterObj = computed(() => clusters.value.find(c => c.id === selectedCluster.value))
+const isK8sCluster = computed(() => selectedClusterObj.value?.compute_provider === 'k8s')
 const enabledStorageClasses = computed(() => storageClasses.value.filter(sc => sc.enabled))
 const showStorageClassSelector = computed(() => isK8sCluster.value)
 
@@ -419,6 +419,16 @@ watch(selectedRuntime, () => {
   fetchImageTags()
 })
 
+watch(selectedCluster, (id) => {
+  const cluster = clusters.value.find(c => c.id === id)
+  if (cluster?.compute_provider === 'k8s') {
+    loadStorageClasses(id).catch(() => {})
+  } else {
+    storageClasses.value = []
+    selectedStorageClass.value = null
+  }
+})
+
 onMounted(async () => {
   try {
     const orgId = authStore.user?.current_org_id
@@ -443,7 +453,10 @@ onMounted(async () => {
       selectedRuntime.value = engines.value[0].runtime_id
     }
     clusters.value = (clustersRes.data.data ?? []).filter((c: any) => c.status === 'connected')
-    const activeCluster = clusters.value[0]
+    const qCluster = route.query.cluster as string | undefined
+    const matchedCluster = qCluster ? clusters.value.find(c => c.id === qCluster) : null
+    selectedCluster.value = matchedCluster?.id ?? clusters.value[0]?.id ?? ''
+    const activeCluster = clusters.value.find(c => c.id === selectedCluster.value)
     if (activeCluster?.compute_provider === 'k8s') {
       try {
         await loadStorageClasses(activeCluster.id)
@@ -500,7 +513,7 @@ const llmReady = computed(() => {
 
 const canDeploy = computed(() =>
   !!name.value.trim() && !!slug.value && slugValid.value && !slugConflict.value && !slugChecking.value && !slugTooLong.value
-  && !!selectedImage.value && clusters.value.length > 0 && !deploying.value
+  && !!selectedImage.value && !!selectedCluster.value && !deploying.value
   && llmReady.value
 )
 
@@ -548,7 +561,7 @@ async function handleDeploy() {
     const res = await api.post('/deploy', {
       name: name.value.trim(),
       slug: fullSlug.value,
-      cluster_id: clusters.value[0].id,
+      cluster_id: selectedCluster.value,
       image_version: selectedImage.value,
       replicas: 1,
       cpu_request: res_spec.cpu_request,
@@ -715,6 +728,39 @@ async function handleDeploy() {
           <p v-else class="text-xs text-muted-foreground">
             {{ t('createInstance.slugHint') }}
           </p>
+        </div>
+
+        <!-- 目标集群选择（多集群时显示） -->
+        <div v-if="clusters.length > 1" class="space-y-2">
+          <div class="flex items-center gap-2">
+            <Server class="w-4 h-4 text-emerald-400" />
+            <label class="text-sm font-medium">{{ t('createInstance.clusterLabel') }}</label>
+          </div>
+          <p class="text-xs text-muted-foreground">{{ t('createInstance.clusterHint') }}</p>
+          <div class="relative">
+            <button
+              class="w-full flex items-center justify-between px-4 py-2.5 rounded-lg bg-card border border-border text-sm hover:border-primary/50 transition-colors text-left"
+              @click="clusterDropdownOpen = !clusterDropdownOpen"
+            >
+              <span>{{ selectedClusterObj?.name || t('createInstance.clusterLabel') }}</span>
+              <ChevronDown class="w-4 h-4 text-muted-foreground transition-transform" :class="clusterDropdownOpen ? 'rotate-180' : ''" />
+            </button>
+            <div
+              v-if="clusterDropdownOpen"
+              class="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg"
+            >
+              <button
+                v-for="c in clusters"
+                :key="c.id"
+                class="w-full px-4 py-2.5 text-left text-sm hover:bg-accent transition-colors flex items-center justify-between"
+                :class="c.id === selectedCluster ? 'text-primary bg-primary/5' : 'text-foreground'"
+                @click="selectedCluster = c.id; clusterDropdownOpen = false"
+              >
+                <span>{{ c.name }}</span>
+                <Check v-if="c.id === selectedCluster" class="w-4 h-4 text-primary shrink-0" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 工作引擎选择 -->
@@ -1240,6 +1286,6 @@ async function handleDeploy() {
 
   <!-- 点击外部关闭下拉框 -->
   <Teleport to="body">
-    <div v-if="imageDropdownOpen || scDropdownOpen" class="fixed inset-0 z-5" @click="imageDropdownOpen = false; scDropdownOpen = false" />
+    <div v-if="imageDropdownOpen || scDropdownOpen || clusterDropdownOpen" class="fixed inset-0 z-5" @click="imageDropdownOpen = false; scDropdownOpen = false; clusterDropdownOpen = false" />
   </Teleport>
 </template>
