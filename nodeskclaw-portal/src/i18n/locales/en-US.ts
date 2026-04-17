@@ -690,6 +690,9 @@ const enUS = {
     agentLabelFieldLabel: "Label",
     agentLabelPlaceholder: "Enter label describing what this AI Employee does",
     agentRenamed: "AI Employee renamed",
+    humanRemoved: "Human seat removed",
+    corridorRemoved: "Corridor removed",
+    removeFailed: "Remove failed, please refresh and retry",
   },
   chat: {
     emptyHint: "{'@'} mention an AI Employee to chat, {'@'}Everyone to broadcast",

@@ -30,7 +30,7 @@ const allNavItems: NavItem[] = [
   { name: 'OrgSettingsLlmKeys', label: () => t('orgSettings.llmKeysTab'), icon: KeyRound },
   { name: 'OrgSettingsGenes', label: () => t('orgSettings.requiredGenesTab'), icon: Dna },
   { name: 'OrgSettingsSmtp', label: () => t('orgSettings.smtpTitle'), icon: Mail, ceOnly: true },
-  { name: 'OrgSettingsNetwork', label: () => t('orgSettings.networkTab'), icon: Globe },
+  { name: 'OrgSettingsNetwork', label: () => t('orgSettings.networkTab'), icon: Globe, ceOnly: true },
   { name: 'OrgEnterpriseFiles', label: () => t('enterpriseFiles.title'), icon: FolderOpen, matchPrefix: '/org-settings/files' },
   { name: 'OrgSettingsAudit', label: () => t('auditLogs.title'), icon: ScrollText },
 ]

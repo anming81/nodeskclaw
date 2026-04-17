@@ -409,7 +409,7 @@ function onAgentDblClick(_id: string) {
   chatOpen.value = true
 }
 
-function onHexAction(action: string) {
+async function onHexAction(action: string) {
   switch (action) {
     case 'add-agent': {
       const q = selectedHex.value?.q
@@ -487,7 +487,12 @@ function onHexAction(action: string) {
       break
     case 'remove-corridor':
       if (selectedHex.value?.entityId) {
-        store.deleteCorridorHex(workspaceId.value, selectedHex.value.entityId)
+        try {
+          await store.deleteCorridorHex(workspaceId.value, selectedHex.value.entityId)
+          toast.success(t('hexAction.corridorRemoved'))
+        } catch {
+          toast.error(t('hexAction.removeFailed'))
+        }
         selectedHex.value = null
         hexDrawerOpen.value = false
       }
@@ -508,7 +513,12 @@ function onHexAction(action: string) {
       break
     case 'remove-human':
       if (selectedHex.value?.entityId) {
-        store.deleteHumanHex(workspaceId.value, selectedHex.value.entityId)
+        try {
+          await store.deleteHumanHex(workspaceId.value, selectedHex.value.entityId)
+          toast.success(t('hexAction.humanRemoved'))
+        } catch {
+          toast.error(t('hexAction.removeFailed'))
+        }
         selectedHex.value = null
         hexDrawerOpen.value = false
       }

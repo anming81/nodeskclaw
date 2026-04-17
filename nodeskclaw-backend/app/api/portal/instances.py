@@ -74,8 +74,16 @@ async def list_instances(
     )
 
     result = await db.execute(query)
+
+    from app.services.tunnel import tunnel_adapter
+    connected = tunnel_adapter.connected_instances
+    health_corrected = False
+
     items = []
     for inst, member_role in result.all():
+        if inst.status == "running" and inst.health_status != "healthy" and inst.id in connected:
+            inst.health_status = "healthy"
+            health_corrected = True
         info = InstanceInfo.model_validate(inst)
         info.my_role = member_role or (
             InstanceRole.admin
@@ -83,6 +91,13 @@ async def list_instances(
             else None
         )
         items.append(info)
+
+    if health_corrected:
+        try:
+            await db.commit()
+        except Exception:
+            logger.debug("列表 tunnel 健康修正持久化失败（非致命）")
+
     return ApiResponse(data=items)
 
 

@@ -201,8 +201,16 @@ async def list_instances(
     if org_id:
         query = query.where(Instance.org_id == org_id)
     result = await db.execute(query)
+
+    from app.services.tunnel import tunnel_adapter
+    connected = tunnel_adapter.connected_instances
+    health_corrected = False
+
     items: list[InstanceInfo] = []
     for i in result.scalars().all():
+        if i.status == "running" and i.health_status != "healthy" and i.id in connected:
+            i.health_status = "healthy"
+            health_corrected = True
         wa_result = await db.execute(
             select(WorkspaceAgent, Workspace).join(
                 Workspace,
@@ -220,6 +228,13 @@ async def list_instances(
         info.workspaces = workspaces
         info.endpoint_url = _compute_endpoint_url(i, tls_enabled=tls_enabled)
         items.append(info)
+
+    if health_corrected:
+        try:
+            await db.commit()
+        except Exception:
+            logger.debug("列表 tunnel 健康修正持久化失败（非致命）")
+
     return items
 
 
@@ -594,6 +609,7 @@ async def _monitor_restart(
                     inst = result.scalar_one_or_none()
                     if inst and inst.status == InstanceStatus.restarting:
                         inst.status = InstanceStatus.running
+                        inst.health_status = "healthy"
                         await db.commit()
                         logger.info("实例 %s 重启完成，状态已恢复为 running", inst.name)
                         ws_ids = await _get_instance_workspace_ids(db, instance_id)
@@ -617,6 +633,7 @@ async def _monitor_restart(
             inst = result.scalar_one_or_none()
             if inst and inst.status == InstanceStatus.restarting:
                 inst.status = InstanceStatus.running
+                inst.health_status = "unknown"
                 await db.commit()
                 ws_ids = await _get_instance_workspace_ids(db, instance_id)
                 _broadcast_agent_status(ws_ids, instance_id, "running")
