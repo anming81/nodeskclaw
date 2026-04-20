@@ -51,7 +51,7 @@ export const wecomPlugin: ChannelPlugin<ResolvedWeComAccount> = {
     id: CHANNEL_KEY,
     label: "WeCom",
     selectionLabel: "WeCom (企业微信)",
-    docsPath: "/channels/wecom",
+    docsPath: "https://github.com/WecomTeam/wecom-openclaw-plugin#readme",
     blurb: "WeCom bot messaging via WebSocket mode.",
     aliases: ["qywx"],
   },
