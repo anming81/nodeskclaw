@@ -1040,6 +1040,91 @@ DINGTALK_PLUGIN_FILES = [
     "src/stream.ts",
     "src/send.ts",
 ]
+WECOM_PLUGIN_DIR = "openclaw-channel-wecom"
+WECOM_PLUGIN_FILES = [
+    "index.ts",
+    "package.json",
+    "openclaw.plugin.json",
+    "skills/wecom-contact-lookup/SKILL.md",
+    "skills/wecom-doc-manager/SKILL.md",
+    "skills/wecom-doc/SKILL.md",
+    "skills/wecom-edit-todo/SKILL.md",
+    "skills/wecom-get-todo-detail/SKILL.md",
+    "skills/wecom-get-todo-list/SKILL.md",
+    "skills/wecom-meeting-create/SKILL.md",
+    "skills/wecom-meeting-manage/SKILL.md",
+    "skills/wecom-meeting-query/SKILL.md",
+    "skills/wecom-msg/SKILL.md",
+    "skills/wecom-preflight/SKILL.md",
+    "skills/wecom-schedule/SKILL.md",
+    "skills/wecom-send-media/SKILL.md",
+    "skills/wecom-send-template-card/SKILL.md",
+    "skills/wecom-smartsheet-data/SKILL.md",
+    "skills/wecom-smartsheet-schema/SKILL.md",
+    "src/accounts.ts",
+    "src/agent/api-client.ts",
+    "src/agent/handler.ts",
+    "src/agent/index.ts",
+    "src/agent/webhook.ts",
+    "src/agent/xml.ts",
+    "src/channel.ts",
+    "src/chat-queue.ts",
+    "src/const.ts",
+    "src/dm-policy.ts",
+    "src/dynamic-agent.ts",
+    "src/dynamic-routing.ts",
+    "src/group-policy.ts",
+    "src/http.ts",
+    "src/interface.ts",
+    "src/mcp/index.ts",
+    "src/mcp/interceptors/biz-error.ts",
+    "src/mcp/interceptors/index.ts",
+    "src/mcp/interceptors/msg-media.ts",
+    "src/mcp/interceptors/smartpage-create.ts",
+    "src/mcp/interceptors/smartpage-export.ts",
+    "src/mcp/interceptors/types.ts",
+    "src/mcp/schema.ts",
+    "src/mcp/tool.ts",
+    "src/mcp/transport.ts",
+    "src/media-handler.ts",
+    "src/media-uploader.ts",
+    "src/message-parser.ts",
+    "src/message-sender.ts",
+    "src/monitor.ts",
+    "src/onboarding.ts",
+    "src/openclaw-compat.ts",
+    "src/reqid-store.ts",
+    "src/runtime.ts",
+    "src/shared/command-auth.ts",
+    "src/shared/xml-parser.ts",
+    "src/state-dir-resolve.ts",
+    "src/state-manager.ts",
+    "src/target.ts",
+    "src/template-card-manager.ts",
+    "src/template-card-parser.ts",
+    "src/timeout.ts",
+    "src/types/account.ts",
+    "src/types/config.ts",
+    "src/types/constants.ts",
+    "src/types/global.d.ts",
+    "src/types/index.ts",
+    "src/types/message.ts",
+    "src/utils.ts",
+    "src/version.ts",
+    "src/webhook/command-auth.ts",
+    "src/webhook/gateway.ts",
+    "src/webhook/handler.ts",
+    "src/webhook/helpers.ts",
+    "src/webhook/http.ts",
+    "src/webhook/index.ts",
+    "src/webhook/media.ts",
+    "src/webhook/monitor.ts",
+    "src/webhook/state.test.ts",
+    "src/webhook/state.ts",
+    "src/webhook/target.ts",
+    "src/webhook/types.ts",
+    "src/webhook/video-frame.ts",
+]
 
 
 def _get_dingtalk_plugin_source_dir() -> Path:
@@ -1104,6 +1189,67 @@ async def deploy_dingtalk_channel_plugin(
     logger.info("已部署 dingtalk channel plugin: instance=%s", instance.name)
 
 
+def _get_wecom_plugin_source_dir() -> Path:
+    candidates = [
+        Path(__file__).resolve().parents[3] / WECOM_PLUGIN_DIR,
+        Path("/app") / WECOM_PLUGIN_DIR,
+    ]
+    for p in candidates:
+        if p.exists() and (p / "index.ts").exists():
+            return p
+    raise FileNotFoundError(
+        f"WeCom plugin source not found. Checked: {[str(c) for c in candidates]}"
+    )
+
+
+async def _deploy_wecom_plugin_files(fs: RemoteFS, plugin_source: Path) -> None:
+    await _deploy_plugin_files_generic(
+        fs, plugin_source, CHANNEL_PLUGIN_REGISTRY["wecom"],
+    )
+
+
+def _inject_wecom_plugin_path(config: dict) -> None:
+    plugins = config.setdefault("plugins", {})
+    load = plugins.setdefault("load", {})
+    paths = load.setdefault("paths", [])
+    old_relative = f".openclaw/extensions/{WECOM_PLUGIN_DIR}"
+    if old_relative in paths:
+        paths.remove(old_relative)
+    plugin_path = f"/root/.openclaw/extensions/{WECOM_PLUGIN_DIR}"
+    if plugin_path not in paths:
+        paths.append(plugin_path)
+
+    entries = plugins.setdefault("entries", {})
+    entries["wecom"] = {"enabled": True}
+
+
+async def deploy_wecom_channel_plugin(
+    instance: Instance, db: AsyncSession,
+) -> None:
+    try:
+        plugin_source = _get_wecom_plugin_source_dir()
+    except FileNotFoundError:
+        logger.warning("WeCom plugin source not found, skipping deployment")
+        return
+
+    async with remote_fs(instance, db) as fs:
+        await _deploy_wecom_plugin_files(fs, plugin_source)
+
+        try:
+            existing = await _read_config_file(fs)
+        except ValueError as e:
+            logger.error("deploy_wecom_plugin: openclaw.json parse error: %s", e)
+            raise
+
+        if existing is None:
+            existing = {}
+
+        _inject_wecom_plugin_path(existing)
+        await _write_config_file(fs, existing)
+
+    logger.info("已部署 wecom channel plugin: instance=%s", instance.name)
+
+
 # ── Channel Plugin Registry & Auto-Sync ──────────────────────
 
 
@@ -1132,6 +1278,12 @@ CHANNEL_PLUGIN_REGISTRY: dict[str, ChannelPluginSpec] = {
         plugin_id="dingtalk",
         dir_name=DINGTALK_PLUGIN_DIR,
         file_list=tuple(DINGTALK_PLUGIN_FILES),
+        min_openclaw_version=(2026, 1, 0),
+    ),
+    "wecom": ChannelPluginSpec(
+        plugin_id="wecom",
+        dir_name=WECOM_PLUGIN_DIR,
+        file_list=tuple(WECOM_PLUGIN_FILES),
         min_openclaw_version=(2026, 1, 0),
     ),
 }
