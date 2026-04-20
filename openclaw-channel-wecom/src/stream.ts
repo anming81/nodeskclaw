@@ -76,12 +76,17 @@ export class WeComWebSocketClient {
       return;
     }
 
-    if (cmd === "aibot_callback" || cmd === "aibot_event_callback") {
-      this.onMessage(frame, this.account);
+    if (cmd === "aibot_subscribe") {
+      const errcode = Number(frame.errcode ?? 0);
+      if (errcode !== 0) {
+        console.error("[wecom-stream] subscribe rejected:", errcode, frame.errmsg || "");
+        this.stop();
+      }
       return;
     }
 
-    if (cmd === "aibot_subscribe") {
+    if (cmd === "aibot_callback" || cmd === "aibot_event_callback") {
+      this.onMessage(frame, this.account);
       return;
     }
   }

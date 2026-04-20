@@ -3,7 +3,7 @@ import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { wecomPlugin, resolveAccount } from "./src/channel.js";
 import { setWeComRuntime } from "./src/runtime.js";
 import { WeComWebSocketClient } from "./src/stream.js";
-import { storeSendTarget } from "./src/send.js";
+import { sendTextMessage, storeSendTarget } from "./src/send.js";
 import type { WeComInboundFrame, ResolvedWeComAccount } from "./src/types.js";
 
 const GATEWAY_PORT_DEFAULT = 3000;
@@ -127,17 +127,23 @@ async function routeInboundMessage(
       }
     }
 
-    const reqId = String(frame.headers?.req_id || "").trim();
-    if (!fullResponse.trim() || !reqId) return;
+    const replyText = fullResponse.trim();
+    if (!replyText) return;
 
-    wsClient?.send({
-      cmd: "aibot_response",
-      headers: { req_id: reqId },
-      body: {
-        msgtype: "text",
-        text: { content: fullResponse.trim() },
-      },
-    });
+    const reqId = String(frame.headers?.req_id || "").trim();
+    if (reqId) {
+      wsClient?.send({
+        cmd: "aibot_response",
+        headers: { req_id: reqId },
+        body: {
+          msgtype: "text",
+          text: { content: replyText },
+        },
+      });
+      return;
+    }
+
+    await sendTextMessage(`${target.chatId}:${target.fromUserId}`, replyText);
   } catch (err) {
     console.error("[wecom] Failed to route message to gateway:", err);
   }

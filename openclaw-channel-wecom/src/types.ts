@@ -25,6 +25,8 @@ export type ResolvedWeComAccount = {
 
 export type WeComInboundFrame = {
   cmd: string;
+  errcode?: number;
+  errmsg?: string;
   headers?: { req_id?: string };
   body?: {
     msgid?: string;

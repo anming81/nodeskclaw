@@ -1,13 +1,18 @@
 import type { WeComSendTarget } from "./types.js";
 
 const targetStore = new Map<string, WeComSendTarget>();
+const TARGET_TTL_MS = 6 * 60 * 60 * 1000;
+const targetSeenAt = new Map<string, number>();
 
 export function storeSendTarget(target: WeComSendTarget): void {
   const key = `${target.chatId}:${target.fromUserId}`;
   targetStore.set(key, target);
+  targetSeenAt.set(key, Date.now());
+  cleanupExpiredTargets();
 }
 
 function resolveTarget(to: string): WeComSendTarget | null {
+  cleanupExpiredTargets();
   if (to.includes(":")) {
     const [chatId, fromUserId] = to.split(":", 2);
     if (!chatId || !fromUserId) return null;
@@ -18,6 +23,16 @@ function resolveTarget(to: string): WeComSendTarget | null {
     if (target.fromUserId === to) return target;
   }
   return null;
+}
+
+function cleanupExpiredTargets(): void {
+  const now = Date.now();
+  for (const [key, seenAt] of targetSeenAt.entries()) {
+    if (now - seenAt > TARGET_TTL_MS) {
+      targetSeenAt.delete(key);
+      targetStore.delete(key);
+    }
+  }
 }
 
 export async function sendTextMessage(
