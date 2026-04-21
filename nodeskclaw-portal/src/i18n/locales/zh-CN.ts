@@ -685,6 +685,7 @@ const zhCN = {
     agentLabelFieldLabel: "标签",
     agentLabelPlaceholder: "输入标签，描述 AI 员工的职责",
     agentRenamed: "AI 员工已重命名",
+    agentRemoved: "AI 员工已从办公室移除",
     humanRemoved: "人类工位已移除",
     corridorRemoved: "过道节点已移除",
     removeFailed: "移除失败，请刷新后重试",

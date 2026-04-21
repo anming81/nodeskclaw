@@ -685,6 +685,7 @@ const enUS = {
     agentLabelFieldLabel: "Label",
     agentLabelPlaceholder: "Enter label describing what this AI Employee does",
     agentRenamed: "AI Employee renamed",
+    agentRemoved: "AI Employee removed from office",
     humanRemoved: "Human seat removed",
     corridorRemoved: "Corridor removed",
     removeFailed: "Remove failed, please refresh and retry",
