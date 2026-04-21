@@ -453,7 +453,7 @@ async def login_with_verification_code(
             detail={
                 "error_code": 40025,
                 "message_key": "errors.auth.email_not_registered",
-                "message": "该邮箱未注册，请先通过账号密码注册",
+                "message": "该邮箱未注册，请联系管理员获取邀请",
             },
         )
     if not user.is_active:

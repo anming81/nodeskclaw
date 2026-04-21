@@ -1663,6 +1663,10 @@ const zhCN = {
       wrong_password: "当前密码错误",
       email_domain_not_allowed: "当前邮箱域名不在允许范围内",
       password_change_required: "请先修改密码",
+      email_not_registered: "该邮箱未注册，请联系管理员获取邀请",
+      code_not_requested: "请先获取验证码",
+      code_expired: "验证码已过期",
+      code_invalid: "验证码错误",
       verification_code_requires_email_or_phone: "验证码登录仅支持邮箱或手机号",
     },
     org: {

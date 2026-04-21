@@ -1663,6 +1663,10 @@ const enUS = {
       wrong_password: "Incorrect current password",
       email_domain_not_allowed: "Email domain is not in the allowed list",
       password_change_required: "Please change your password first",
+      email_not_registered: "This email is not registered. Please contact your administrator for an invitation.",
+      code_not_requested: "Please request a verification code first",
+      code_expired: "Verification code has expired",
+      code_invalid: "Invalid verification code",
       verification_code_requires_email_or_phone: "Verification code login only supports email or phone number",
     },
     org: {
