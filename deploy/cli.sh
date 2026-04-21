@@ -28,6 +28,7 @@
 #   --tag TAG       镜像标签（默认 YYYYMMDD-<git-hash>）
 #   --skip-proxy    all 时跳过 proxy
 #   --mirrors NAME  使用镜像源预设（如 cn），加速构建依赖下载
+#   --platform PLT  镜像平台（默认 linux/amd64，可选 linux/arm64）
 #   --no-cache      不使用 Docker 缓存
 #   --env-file FILE init 时指定 .env 文件
 #   --force         init 时跳过 Secret 差异确认
@@ -266,7 +267,7 @@ EODF
   esac
 
   log "[$(ctag "$component")] 构建镜像: $image"
-  if ! docker build --platform linux/amd64 \
+  if ! docker build --platform "$IMAGE_PLATFORM" \
     $NO_CACHE \
     $extra_args \
     -f "$dockerfile" \
@@ -720,6 +721,7 @@ usage() {
   --tag TAG       镜像标签（默认 YYYYMMDD-<git-hash>）
   --skip-proxy    all 时跳过 proxy
   --mirrors NAME  使用镜像源预设（如 cn），加速依赖下载
+  --platform PLT  镜像平台（默认 linux/amd64，可选 linux/arm64）
   --no-cache      不使用 Docker 缓存
   --env-file FILE init 时指定 .env 文件
   --force         init 时跳过 Secret 差异确认
@@ -744,6 +746,7 @@ IS_PROD=false
 EE_MODE=false
 CE_ONLY=""
 MIRRORS=""
+IMAGE_PLATFORM="linux/amd64"
 
 case "$COMMAND" in
   deploy)
@@ -779,6 +782,7 @@ while [[ $# -gt 0 ]]; do
     --deploy-only) DEPLOY_ONLY=true ;;
     --tag)         CUSTOM_TAG="$2"; shift ;;
     --skip-proxy)  SKIP_PROXY=true ;;
+    --platform)    IMAGE_PLATFORM="$2"; shift ;;
     --no-cache)    NO_CACHE="--no-cache" ;;
     --env-file)    ENV_FILE="$2"; shift ;;
     --force)       FORCE=true ;;
@@ -806,6 +810,11 @@ fi
 
 if [[ "$BUILD_ONLY" == true && "$DEPLOY_ONLY" == true ]]; then
   err "--build-only 和 --deploy-only 不能同时使用"
+  exit 1
+fi
+
+if [[ "$IMAGE_PLATFORM" != "linux/amd64" && "$IMAGE_PLATFORM" != "linux/arm64" ]]; then
+  err "--platform 仅支持 linux/amd64 或 linux/arm64"
   exit 1
 fi
 
