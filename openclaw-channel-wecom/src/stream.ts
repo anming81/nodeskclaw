@@ -8,6 +8,7 @@ import type {
 const WEBSOCKET_URL_DEFAULT = "wss://openws.work.weixin.qq.com";
 const RECONNECT_BASE_MS = 3_000;
 const RECONNECT_MAX_MS = 60_000;
+const HEARTBEAT_MS = 30_000;
 
 type MessageHandler = (msg: WeComInboundMessage, account: ResolvedWeComAccount) => void;
 
@@ -17,6 +18,7 @@ export class WeComStreamClient {
   private onMessage: MessageHandler;
   private stopped = false;
   private reconnectAttempt = 0;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(account: ResolvedWeComAccount, onMessage: MessageHandler) {
     this.account = account;
@@ -35,37 +37,31 @@ export class WeComStreamClient {
 
   stop(): void {
     this.stopped = true;
+    this.stopHeartbeat();
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
   }
 
-  async sendText(chatId: string, content: string): Promise<string> {
+  async sendMessage(req: WeComOutboundRequest): Promise<string> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("WeCom websocket not connected");
     }
-
-    const req: WeComOutboundRequest = {
-      action: "send_message",
-      requestId: `wecom-${Date.now()}`,
-      chatId,
-      msgtype: "text",
-      text: { content },
-    };
-
     this.ws.send(JSON.stringify(req));
-    return req.requestId;
+    return req.req_id || `wecom-${Date.now()}`;
   }
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
-    const wsUrl = buildWsUrl(this.account);
+    const wsUrl = this.account.websocketUrl || WEBSOCKET_URL_DEFAULT;
     const ws = new WebSocket(wsUrl);
     this.ws = ws;
 
     ws.onopen = () => {
       this.reconnectAttempt = 0;
+      this.sendSubscribe(ws);
+      this.startHeartbeat(ws);
       console.log("[wecom-stream] WebSocket connected");
     };
 
@@ -74,7 +70,7 @@ export class WeComStreamClient {
       if (!frame) {
         return;
       }
-      this.handleFrame(frame, ws);
+      this.handleFrame(frame);
     };
 
     ws.onerror = (event: Event) => {
@@ -82,6 +78,7 @@ export class WeComStreamClient {
     };
 
     ws.onclose = () => {
+      this.stopHeartbeat();
       this.ws = null;
       if (!this.stopped) {
         this.scheduleReconnect();
@@ -89,35 +86,54 @@ export class WeComStreamClient {
     };
   }
 
-  private handleFrame(frame: WeComStreamFrame, ws: WebSocket): void {
-    const frameType = (frame.type ?? frame.event ?? frame.topic ?? "").toLowerCase();
-    if (frameType.includes("ping") || frameType.includes("heartbeat")) {
-      this.sendAck(ws, frame.id ?? frame.messageId);
+  private handleFrame(frame: WeComStreamFrame): void {
+    const cmd = normalizeCmd(frame);
+    if (cmd === "pong" || cmd === "ping") {
+      return;
+    }
+
+    if (cmd === "aibot_subscribe" || cmd === "aibot_subscribe_ack") {
+      return;
+    }
+
+    if (cmd === "aibot_msg_callback" || cmd === "aibot_event_callback") {
+      const inbound = extractInboundMessage(frame);
+      if (inbound) {
+        this.onMessage(inbound, this.account);
+      }
       return;
     }
 
     const inbound = extractInboundMessage(frame);
     if (inbound) {
       this.onMessage(inbound, this.account);
-      this.sendAck(ws, frame.id ?? inbound.messageId);
-      return;
-    }
-
-    if (frame.id || frame.messageId) {
-      this.sendAck(ws, frame.id ?? frame.messageId);
     }
   }
 
-  private sendAck(ws: WebSocket, frameId?: string): void {
+  private sendSubscribe(ws: WebSocket): void {
     if (ws.readyState !== WebSocket.OPEN) return;
 
     const payload = {
-      action: "ack",
-      messageId: frameId ?? "",
-      ts: Date.now(),
+      cmd: "aibot_subscribe",
+      bot_id: this.account.botId,
+      secret: this.account.secret,
     };
-
     ws.send(JSON.stringify(payload));
+  }
+
+  private startHeartbeat(ws: WebSocket): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ cmd: "ping", ts: Date.now() }));
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   private scheduleReconnect(): void {
@@ -134,44 +150,39 @@ export class WeComStreamClient {
   }
 }
 
-function buildWsUrl(account: ResolvedWeComAccount): string {
-  const base = account.websocketUrl || WEBSOCKET_URL_DEFAULT;
-  const url = new URL(base);
-  url.searchParams.set("botId", account.botId);
-  url.searchParams.set("secret", account.secret);
-  return url.toString();
-}
-
 function parseFrame(raw: string): WeComStreamFrame | null {
   try {
-    const parsed = JSON.parse(raw) as WeComStreamFrame;
-    return parsed;
+    return JSON.parse(raw) as WeComStreamFrame;
   } catch (err) {
     console.error("[wecom-stream] parse frame failed:", err);
     return null;
   }
 }
 
+function normalizeCmd(frame: WeComStreamFrame): string {
+  return String(frame.cmd ?? frame.type ?? frame.event ?? frame.topic ?? "").toLowerCase();
+}
+
 function extractInboundMessage(frame: WeComStreamFrame): WeComInboundMessage | null {
   const payload = frame.data ?? frame.payload;
   const candidate = typeof payload === "string" ? safeParse(payload) : payload;
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
-  const obj = candidate as Record<string, unknown>;
+  const obj = (candidate && typeof candidate === "object") ? candidate as Record<string, unknown> : {};
 
-  const chatId = toStringOrEmpty(obj.chatId ?? obj.conversationId ?? frame.chatId);
-  const senderId = toStringOrEmpty(obj.fromUserId ?? obj.senderId ?? frame.fromUserId);
-  const text = toStringOrEmpty(
-    obj.text ?? obj.content ?? (obj.message as Record<string, unknown> | undefined)?.content ?? frame.text,
-  ).trim();
+  const chatId = toStringOrEmpty(obj.chat_id ?? obj.chatId ?? frame.chat_id ?? frame.chatId);
+  const senderId = toStringOrEmpty(
+    obj.from_user_id ?? obj.fromUserId ?? obj.senderId ?? frame.from_user_id ?? frame.fromUserId,
+  );
+  const text = toStringOrEmpty(obj.content ?? obj.text ?? frame.content ?? frame.text).trim();
 
   if (!chatId || !senderId || !text) {
     return null;
   }
 
-  const messageId = toStringOrEmpty(obj.messageId ?? obj.msgId ?? frame.messageId) || `wecom-${Date.now()}`;
-  return { chatId, senderId, text, messageId };
+  const messageId =
+    toStringOrEmpty(obj.message_id ?? obj.messageId ?? frame.message_id ?? frame.messageId) || `wecom-${Date.now()}`;
+  const reqId = toStringOrEmpty(obj.req_id ?? obj.reqId ?? frame.req_id ?? frame.reqId) || undefined;
+
+  return { chatId, senderId, text, messageId, reqId };
 }
 
 function safeParse(raw: string): unknown {

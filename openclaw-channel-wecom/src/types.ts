@@ -18,19 +18,24 @@ export type ResolvedWeComAccount = {
 };
 
 export type WeComStreamFrame = {
+  cmd?: string;
   id?: string;
   type?: string;
   topic?: string;
   event?: string;
+  req_id?: string;
+  reqId?: string;
   data?: unknown;
   payload?: unknown;
   text?: string;
   content?: string;
+  chat_id?: string;
   chatId?: string;
+  from_user_id?: string;
   fromUserId?: string;
   senderId?: string;
-  conversationId?: string;
   messageId?: string;
+  message_id?: string;
 };
 
 export type WeComInboundMessage = {
@@ -38,13 +43,13 @@ export type WeComInboundMessage = {
   senderId: string;
   text: string;
   messageId: string;
+  reqId?: string;
 };
 
 export type WeComOutboundRequest = {
-  action: "send_message";
-  requestId: string;
-  chatId: string;
-  msgtype: "text" | "markdown";
-  text?: { content: string };
-  markdown?: { content: string };
+  cmd: "aibot_send_msg" | "aibot_respond_msg";
+  req_id?: string;
+  chat_id?: string;
+  msg_type: "text";
+  content: string;
 };

@@ -34,7 +34,7 @@ async function routeInboundMessage(
   const url = `http://localhost:${gatewayPort}/v1/chat/completions`;
 
   const sessionKey = `wecom:${msg.chatId}:${msg.senderId}`;
-  const replyTarget = msg.chatId;
+  const replyTarget = msg.reqId ? `${msg.chatId}:${msg.reqId}` : msg.chatId;
 
   try {
     const resp = await fetch(url, {

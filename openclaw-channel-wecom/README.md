@@ -10,18 +10,23 @@ OpenClaw Channel 插件 —— 通过企业微信智能机器人长连接（WebS
 {
   "channels": {
     "wecom": {
-      "accounts": {
-        "default": {
-          "botId": "your-bot-id",
-          "secret": "your-secret",
-          "enabled": true,
-          "websocketUrl": "wss://openws.work.weixin.qq.com"
-        }
-      }
+      "botId": "your-bot-id",
+      "secret": "your-secret",
+      "enabled": true,
+      "websocketUrl": "wss://openws.work.weixin.qq.com"
     }
   }
 }
 ```
+
+插件也兼容 `accounts` 多账号结构。
+
+## 协议行为
+
+- 建立 WebSocket 后发送 `aibot_subscribe`（`bot_id` + `secret`）完成订阅。
+- 每 30 秒发送 `ping` 保活。
+- 接收 `aibot_msg_callback` / `aibot_event_callback` 并路由到 OpenClaw gateway。
+- 回包优先走 `aibot_respond_msg`（命中 `req_id`），否则走 `aibot_send_msg`。
 
 ## 说明
 

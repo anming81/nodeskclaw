@@ -13,14 +13,34 @@ function getChannelSection(cfg: OpenClawConfig): Record<string, unknown> | undef
     | undefined;
 }
 
+function isFlatConfig(section: Record<string, unknown>): boolean {
+  return typeof section.botId === "string" || typeof section.secret === "string";
+}
+
+function resolveRawAccount(
+  section: Record<string, unknown> | undefined,
+  accountId: string,
+): WeComAccountConfig | undefined {
+  if (!section) {
+    return undefined;
+  }
+  const accounts = section.accounts as Record<string, WeComAccountConfig> | undefined;
+  if (accounts && accounts[accountId]) {
+    return accounts[accountId];
+  }
+  if (isFlatConfig(section)) {
+    return section as unknown as WeComAccountConfig;
+  }
+  return undefined;
+}
+
 export function resolveAccount(
   cfg: OpenClawConfig,
   accountId?: string | null,
 ): ResolvedWeComAccount {
   const section = getChannelSection(cfg);
-  const accounts = (section?.accounts ?? {}) as Record<string, WeComAccountConfig>;
   const id = accountId ?? DEFAULT_ACCOUNT_ID;
-  const raw = accounts[id];
+  const raw = resolveRawAccount(section, id);
 
   if (!raw) {
     return {
@@ -59,7 +79,17 @@ export const wecomPlugin: ChannelPlugin<ResolvedWeComAccount> = {
   config: {
     listAccountIds: (cfg) => {
       const section = getChannelSection(cfg);
-      return Object.keys((section?.accounts ?? {}) as Record<string, unknown>);
+      if (!section) {
+        return [];
+      }
+      const accounts = section.accounts as Record<string, unknown> | undefined;
+      if (accounts && Object.keys(accounts).length > 0) {
+        return Object.keys(accounts);
+      }
+      if (isFlatConfig(section)) {
+        return [DEFAULT_ACCOUNT_ID];
+      }
+      return [];
     },
     resolveAccount: (cfg, accountId) => resolveAccount(cfg, accountId),
     isConfigured: (account) => account.configured,
