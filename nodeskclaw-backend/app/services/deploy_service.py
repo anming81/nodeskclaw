@@ -45,6 +45,30 @@ from app.services.codex_provider import normalize_selected_models
 logger = logging.getLogger(__name__)
 
 
+def _collect_platform_host_endpoints() -> list[tuple[str, int]]:
+    """从 AGENT_API_BASE_URL / LLM_PROXY_INTERNAL_URL 提取宿主机 IP:Port 列表。
+
+    仅收集 IP 地址（非 K8s Service 域名），用于 NetworkPolicy 放行。
+    """
+    _default_ports = {"http": 80, "https": 443}
+    endpoints: list[tuple[str, int]] = []
+    urls = [settings.AGENT_API_BASE_URL, settings.LLM_PROXY_INTERNAL_URL, settings.LLM_PROXY_URL]
+    for url in urls:
+        if not url:
+            continue
+        parsed = _urlparse(url)
+        host = parsed.hostname or ""
+        port = parsed.port
+        if port is None:
+            port = _default_ports.get((parsed.scheme or "").lower())
+        if not host or port is None:
+            continue
+        parts = host.split(".")
+        if all(p.isdigit() for p in parts) and len(parts) == 4:
+            endpoints.append((host, port))
+    return endpoints
+
+
 def _compute_llm_providers(
     llm_configs: list | None, org_active_providers: list[str],
 ) -> list[str] | None:
@@ -389,6 +413,8 @@ async def deploy_instance(
     if not slug:
         slug = _re.sub(r"[^a-z0-9-]", "-", req.name.lower()).strip("-")
         slug = _re.sub(r"-{2,}", "-", slug) or "instance"
+    if slug and slug[0].isdigit():
+        slug = f"i-{slug}"
 
     # namespace: adapter 决定命名格式，K8s 限制 63 字符
     auto_ns = adapter.build_namespace(slug, org)
@@ -1055,6 +1081,7 @@ async def _execute_deploy_inner(ctx, async_session_factory, get_config, total, s
                     ingress_enabled=np_ingress_enabled,
                     egress_enabled=np_egress_enabled,
                     ingress_allow_cidrs=ingress_cidrs,
+                    platform_host_endpoints=_collect_platform_host_endpoints(),
                 )
                 try:
                     await k8s.networking.create_namespaced_network_policy(ctx.namespace, np)
@@ -1576,6 +1603,7 @@ async def execute_rebuild_pipeline(ctx: _DeployContext) -> None:
                     ingress_enabled=np_ingress_on,
                     egress_enabled=np_egress_on,
                     ingress_allow_cidrs=ingress_cidrs,
+                    platform_host_endpoints=_collect_platform_host_endpoints(),
                 )
                 try:
                     await k8s.networking.create_namespaced_network_policy(ctx.namespace, np)

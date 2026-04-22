@@ -388,6 +388,12 @@ const enUS = {
     focusMode: "Focus Mode",
     skillLearnedToast: "{agentName} learned {geneName}",
     skillLearnedToastWithSummary: "{agentName} learned {geneName}: {summary}",
+    restartAll: "Restart All Instances",
+    restartAllConfirm: "Restart all AI employees in this workspace? They will be temporarily offline during restart.",
+    restartAllSuccess: "Successfully restarted {succeeded} instances",
+    restartAllPartial: "{succeeded} instances restarted, {failed} failed",
+    restartAllFailed: "Restart failed",
+    restartAllNoInstances: "No instances to restart",
   },
   workspaceSettings: {
     title: "Cyber Office Settings",
@@ -845,6 +851,15 @@ const enUS = {
     engineOpenclawDesc: "Supports tool calling, gene system, and multi-skill management",
     engineNanobotName: "Light Work Engine",
     engineNanobotDesc: "Ultra-lightweight and fast for simple chat scenarios",
+    skillEditor: {
+      title: "Role & Prompts",
+      save: "Save Changes",
+      saved: "Saved",
+      saveFailed: "Save failed",
+      restartHint: "Restart required for changes to take effect",
+      empty: "No skills",
+      loadFailed: "Failed to load skill content",
+    },
   },
   instanceRuntime: {
     title: "Runtime Status",
@@ -1791,6 +1806,7 @@ const enUS = {
       decision_record_not_found: "Decision record not found",
     },
     workspace: {
+      restart_no_instances: "No instances available to restart in this workspace",
       not_found: "Cyber office does not exist",
       add_agent_invalid: "Invalid parameters for adding AI Employee",
       delete_invalid: "Please remove all AI employees from the cyber office before deleting it",

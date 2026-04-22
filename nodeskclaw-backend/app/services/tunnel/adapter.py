@@ -85,16 +85,26 @@ def _format_user_content(sender_name: str, text: str, attachments: list[dict]) -
 
 
 def _extract_mentions(
-    text: str, members: list[dict], self_name: str,
+    text: str,
+    members: list[dict],
+    self_name: str,
+    *,
+    exclude_names: list[str] | None = None,
 ) -> list[dict]:
     """Parse @name from agent response, matching all workspace members (agent + human).
 
     Uses negative lookahead to avoid prefix false positives (e.g. @test matching @test-2).
+    ``exclude_names`` suppresses mentions of the upstream sender so that
+    gratuitous acknowledgements like "@咕咕嘎嘎 收到！" don't trigger a
+    collaboration round-trip back to the original requester.
     """
+    skip = {self_name}
+    if exclude_names:
+        skip.update(exclude_names)
     results = []
     for m in members:
         name = m.get("name", "")
-        if not name or name == self_name:
+        if not name or name in skip:
             continue
         if re.search(rf"@{re.escape(name)}(?![\w-])", text):
             results.append(m)
@@ -107,10 +117,13 @@ class _InstanceConnection:
     __slots__ = (
         "ws", "instance_id", "connected_at", "last_pong",
         "msg_count_in", "msg_count_out",
-        "_pending_responses", "_stream_queues",
+        "_pending_responses", "_instance_streams",
     )
 
-    def __init__(self, ws: WebSocket, instance_id: str) -> None:
+    def __init__(
+        self, ws: WebSocket, instance_id: str,
+        instance_streams: dict[str, asyncio.Queue[TunnelMessage]],
+    ) -> None:
         self.ws = ws
         self.instance_id = instance_id
         self.connected_at = time.monotonic()
@@ -118,7 +131,7 @@ class _InstanceConnection:
         self.msg_count_in = 0
         self.msg_count_out = 0
         self._pending_responses: dict[str, asyncio.Future[TunnelMessage]] = {}
-        self._stream_queues: dict[str, asyncio.Queue[TunnelMessage]] = {}
+        self._instance_streams = instance_streams
 
     def create_response_future(self, request_id: str) -> asyncio.Future[TunnelMessage]:
         loop = asyncio.get_running_loop()
@@ -128,16 +141,21 @@ class _InstanceConnection:
 
     def register_stream(self, request_id: str) -> asyncio.Queue[TunnelMessage]:
         q: asyncio.Queue[TunnelMessage] = asyncio.Queue()
-        self._stream_queues[request_id] = q
+        self._instance_streams[request_id] = q
         return q
 
     def unregister_stream(self, request_id: str) -> None:
-        self._stream_queues.pop(request_id, None)
+        self._instance_streams.pop(request_id, None)
 
     def resolve_response(self, reply_to: str, msg: TunnelMessage) -> bool:
-        queue = self._stream_queues.get(reply_to)
+        queue = self._instance_streams.get(reply_to)
         if queue is not None:
             queue.put_nowait(msg)
+            if msg.type in (
+                TunnelMessageType.CHAT_RESPONSE_DONE,
+                TunnelMessageType.CHAT_RESPONSE_ERROR,
+            ):
+                self._instance_streams.pop(reply_to, None)
             return True
         fut = self._pending_responses.pop(reply_to, None)
         if fut and not fut.done():
@@ -150,7 +168,7 @@ class _InstanceConnection:
             if not fut.done():
                 fut.cancel()
         self._pending_responses.clear()
-        self._stream_queues.clear()
+        self._instance_streams.clear()
 
 
 class TunnelAdapter:
@@ -163,6 +181,7 @@ class TunnelAdapter:
         self._ping_tasks: dict[str, asyncio.Task] = {}
         self._stats = {"total_connections": 0, "total_messages_in": 0, "total_messages_out": 0}
         self._ws_context_cache: dict[str, _WorkspaceContext] = {}
+        self._instance_streams: dict[str, dict[str, asyncio.Queue[TunnelMessage]]] = {}
 
     @property
     def connected_instances(self) -> set[str]:
@@ -216,8 +235,10 @@ class TunnelAdapter:
             return
 
         old_conn = self._connections.get(instance_id)
+        surviving_streams: dict[str, asyncio.Queue[TunnelMessage]] = {}
         if old_conn:
             logger.info("Tunnel: kicking previous connection for %s", instance_id)
+            surviving_streams = dict(old_conn._instance_streams)
             old_conn.cancel_all()
             try:
                 await old_conn.ws.close(code=4010, reason="replaced")
@@ -225,7 +246,14 @@ class TunnelAdapter:
                 logger.warning("Tunnel: failed to close old ws for %s", instance_id, exc_info=True)
             self._cleanup_instance(instance_id)
 
-        conn = _InstanceConnection(ws, instance_id)
+        streams = self._instance_streams.setdefault(instance_id, {})
+        streams.update(surviving_streams)
+        conn = _InstanceConnection(ws, instance_id, streams)
+        if streams:
+            logger.info(
+                "Tunnel: %d in-flight stream(s) survive reconnect for %s",
+                len(streams), instance_id,
+            )
         self._connections[instance_id] = conn
         self._stats["total_connections"] += 1
 
@@ -282,7 +310,12 @@ class TunnelAdapter:
 
     def _on_chat_response(self, conn: _InstanceConnection, msg: TunnelMessage) -> None:
         if msg.reply_to:
-            conn.resolve_response(msg.reply_to, msg)
+            resolved = conn.resolve_response(msg.reply_to, msg)
+            if not resolved:
+                logger.warning(
+                    "Tunnel: chat response for request %s has no handler on conn %s (type=%s)",
+                    msg.reply_to, conn.instance_id, msg.type,
+                )
 
     async def _on_collaboration_message(self, instance_id: str, msg: TunnelMessage) -> None:
         try:
@@ -323,6 +356,10 @@ class TunnelAdapter:
             payload=payload,
         )
         await self._send(conn.ws, msg)
+        logger.info(
+            "Tunnel: chat request sent to %s, request_id=%s, trace=%s",
+            instance_id, request_id, trace_id,
+        )
         return AsyncChatStream(conn, request_id, trace_id)
 
     async def send_learning_task(self, instance_id: str, task: dict) -> None:
@@ -504,26 +541,6 @@ class TunnelAdapter:
                 "Mention skip for %s: targets=%s, mentioned=%s",
                 agent_name, mention_targets, is_mentioned,
             )
-            user_content = _format_user_content(data.sender.name, data.content, data.attachments)
-            messages = [
-                {"role": "system", "content": context_prompt},
-                {"role": "user", "content": user_content},
-            ]
-            try:
-                chat_stream = await self.send_chat_request(
-                    target_node_id, messages,
-                    workspace_id=workspace_id,
-                    trace_id=envelope.traceid,
-                    stream=True,
-                    no_reply=True,
-                )
-                async for _ in chat_stream:
-                    break
-            except Exception as e:
-                logger.debug("Context injection for %s failed: %s", agent_name, e)
-            broadcast_event(workspace_id, "agent:done", {
-                "instance_id": target_node_id, "agent_name": agent_name,
-            })
             return DeliveryResult(
                 success=True, target_node_id=target_node_id,
                 transport=self.transport_id,
@@ -656,7 +673,15 @@ class TunnelAdapter:
                 logger.warning("Delegation %s->%s failed: %s", action, delegate_target, e)
 
         elif full_response and not msg_service.is_no_reply(full_response.strip()):
-            mentions = _extract_mentions(full_response, ws_ctx.members, agent_name)
+            upstream_sender = data.sender.name if data.sender else ""
+            mentions = _extract_mentions(
+                full_response, ws_ctx.members, agent_name,
+                exclude_names=[upstream_sender] if upstream_sender else None,
+            )
+            logger.info(
+                "Agent %s response mentions=%s (upstream=%s, response_len=%d)",
+                agent_name, [m["name"] for m in mentions], upstream_sender, len(full_response),
+            )
             if mentions:
                 depth = (data.extensions or {}).get("depth", 0)
                 from app.core.deps import async_session_factory
@@ -1022,11 +1047,15 @@ class AsyncChatStream:
             self._conn.unregister_stream(self._request_id)
             raise StopAsyncIteration
         try:
-            msg = await asyncio.wait_for(self._queue.get(), timeout=120)
+            msg = await asyncio.wait_for(self._queue.get(), timeout=600)
             if msg.type in (TunnelMessageType.CHAT_RESPONSE_DONE, TunnelMessageType.CHAT_RESPONSE_ERROR):
                 self._done = True
                 self._conn.unregister_stream(self._request_id)
             return msg
         except asyncio.TimeoutError:
+            logger.warning(
+                "Chat stream timeout (600s) for request %s, trace=%s",
+                self._request_id, self._trace_id,
+            )
             self._conn.unregister_stream(self._request_id)
             raise StopAsyncIteration

@@ -173,6 +173,7 @@ async def _apply_template_to_workspace(
 
     from app.models.base import not_deleted
     from app.models.corridor import CorridorHex, HexConnection, ordered_pair
+    from app.models.node_card import NodeCard
     from app.models.workspace_template import WorkspaceTemplate
     from app.services.runtime import node_card as node_card_service
 
@@ -318,15 +319,26 @@ async def apply_internal_deploy_topology(
             edge.get("a_q", 0), edge.get("a_r", 0),
             edge.get("b_q", 0), edge.get("b_r", 0),
         )
-        db.add(HexConnection(
-            id=str(uuid.uuid4()),
-            workspace_id=workspace_id,
-            hex_a_q=aq, hex_a_r=ar,
-            hex_b_q=bq, hex_b_r=br,
-            direction=edge.get("direction", "both"),
-            auto_created=edge.get("auto_created", False),
-            created_by=user_id,
-        ))
+        existing = (await db.execute(
+            select(HexConnection.id).where(
+                HexConnection.workspace_id == workspace_id,
+                HexConnection.hex_a_q == aq,
+                HexConnection.hex_a_r == ar,
+                HexConnection.hex_b_q == bq,
+                HexConnection.hex_b_r == br,
+                HexConnection.deleted_at.is_(None),
+            ).limit(1)
+        )).scalar_one_or_none()
+        if existing is None:
+            db.add(HexConnection(
+                id=str(uuid.uuid4()),
+                workspace_id=workspace_id,
+                hex_a_q=aq, hex_a_r=ar,
+                hex_b_q=bq, hex_b_r=br,
+                direction=edge.get("direction", "both"),
+                auto_created=edge.get("auto_created", False),
+                created_by=user_id,
+            ))
 
     await db.commit()
 
@@ -1215,18 +1227,32 @@ async def list_tasks_paginated(
     ], total
 
 
+async def _resolve_assignee_id(
+    db: AsyncSession, workspace_id: str, raw_id: str | None,
+) -> str | None:
+    """Resolve assignee_id that may be a display name into an instance UUID."""
+    if not raw_id:
+        return None
+    from app.services.collaboration_service import looks_like_uuid, find_agent_by_name_or_id
+    if looks_like_uuid(raw_id):
+        return raw_id
+    inst = await find_agent_by_name_or_id(db, workspace_id, raw_id)
+    return inst.id if inst else None
+
+
 async def create_task(
     db: AsyncSession, workspace_id: str, data: TaskCreate,
     created_by_instance_id: str | None = None,
     schedule_id: str | None = None,
     deadline: datetime | None = None,
 ) -> TaskInfo:
+    resolved_assignee = await _resolve_assignee_id(db, workspace_id, data.assignee_id)
     task = WorkspaceTask(
         workspace_id=workspace_id,
         title=data.title,
         description=data.description,
         priority=data.priority if data.priority in VALID_TASK_PRIORITIES else "medium",
-        assignee_instance_id=data.assignee_id,
+        assignee_instance_id=resolved_assignee,
         created_by_instance_id=created_by_instance_id,
         estimated_value=data.estimated_value,
         schedule_id=schedule_id,
@@ -1282,7 +1308,9 @@ async def update_task(
     if data.priority is not None and data.priority in VALID_TASK_PRIORITIES:
         task.priority = data.priority
     if data.assignee_id is not None:
-        task.assignee_instance_id = data.assignee_id
+        task.assignee_instance_id = await _resolve_assignee_id(
+            db, workspace_id, data.assignee_id,
+        ) or data.assignee_id
     if data.estimated_value is not None:
         task.estimated_value = data.estimated_value
     if data.actual_value is not None:
@@ -2099,3 +2127,47 @@ async def delete_shared_file(
     f.soft_delete()
     await db.commit()
     return True
+
+
+async def restart_all_instances(workspace_id: str, db: AsyncSession) -> dict:
+    from app.services import instance_service
+
+    agents_result = await db.execute(
+        select(Instance, WorkspaceAgent).join(
+            WorkspaceAgent,
+            (WorkspaceAgent.instance_id == Instance.id) & (WorkspaceAgent.deleted_at.is_(None)),
+        ).where(
+            WorkspaceAgent.workspace_id == workspace_id,
+            Instance.deleted_at.is_(None),
+        )
+    )
+    agents = agents_result.all()
+
+    restartable = [
+        (inst, wa) for inst, wa in agents
+        if inst.status in ("running", "learning")
+    ]
+
+    if not restartable:
+        return {"total": len(agents), "succeeded": 0, "failed": 0, "skipped": len(agents), "details": []}
+
+    details = []
+    succeeded = 0
+    failed = 0
+    for inst, _wa in restartable:
+        try:
+            await instance_service.restart_instance(inst.id, db)
+            succeeded += 1
+            details.append({"instance_id": inst.id, "name": inst.name, "status": "ok"})
+        except Exception as exc:
+            failed += 1
+            details.append({"instance_id": inst.id, "name": inst.name, "status": "failed", "error": str(exc)[:200]})
+            logger.warning("批量重启: 实例 %s 失败: %s", inst.name, exc)
+
+    return {
+        "total": len(agents),
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped": len(agents) - len(restartable),
+        "details": details,
+    }

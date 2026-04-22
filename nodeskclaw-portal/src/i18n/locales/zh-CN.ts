@@ -388,6 +388,12 @@ const zhCN = {
     focusMode: "聚焦模式",
     skillLearnedToast: "{agentName} 学会了 {geneName}",
     skillLearnedToastWithSummary: "{agentName} 学会了 {geneName}：{summary}",
+    restartAll: "重启全部实例",
+    restartAllConfirm: "确认重启该办公室全部 AI 员工？重启过程中员工将暂时离线。",
+    restartAllSuccess: "已成功重启 {succeeded} 个实例",
+    restartAllPartial: "{succeeded} 个实例已重启，{failed} 个失败",
+    restartAllFailed: "重启失败",
+    restartAllNoInstances: "没有可重启的实例",
   },
   workspaceSettings: {
     title: "办公室设置",
@@ -845,6 +851,15 @@ const zhCN = {
     engineOpenclawDesc: "支持工具调用、基因系统、多技能管理",
     engineNanobotName: "轻量工作引擎",
     engineNanobotDesc: "超轻量，快速部署，适合简单对话场景",
+    skillEditor: {
+      title: "角色与提示词",
+      save: "保存修改",
+      saved: "已保存",
+      saveFailed: "保存失败",
+      restartHint: "修改后需重启 AI 员工才能生效",
+      empty: "暂无技能",
+      loadFailed: "加载技能内容失败",
+    },
   },
   instanceRuntime: {
     title: "运行状态",
@@ -1791,6 +1806,7 @@ const zhCN = {
       decision_record_not_found: "审批记录不存在",
     },
     workspace: {
+      restart_no_instances: "该办公室没有可重启的实例",
       not_found: "办公室不存在",
       add_agent_invalid: "添加 AI 员工参数不合法",
       delete_invalid: "请先移除办公室内的所有 AI 员工，再删除办公室",

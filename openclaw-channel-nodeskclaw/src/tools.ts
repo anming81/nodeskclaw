@@ -20,6 +20,7 @@ export const NODESKCLAW_TOOL_NAMES = [
   "nodeskclaw_gene_discovery",
   "nodeskclaw_file_download",
   "nodeskclaw_chat_history",
+  "nodeskclaw_shared_files",
 ] as const;
 
 function resolveToolConfig(config: OpenClawConfig, sessionWorkspaceId?: string): ToolConfig {
@@ -100,11 +101,75 @@ async function bbApiFetch(
   return result;
 }
 
+const AUTO_SAVE_KEYWORDS = /脚本|终稿|报告|方案|拆解|分析/;
+const AUTO_SAVE_MIN_LENGTH = 500;
+
+async function autoSaveAsFile(
+  cfg: ToolConfig, ws: string, title: string, content: string,
+): Promise<Record<string, unknown> | null> {
+  if (content.length < AUTO_SAVE_MIN_LENGTH || !AUTO_SAVE_KEYWORDS.test(title)) return null;
+  try {
+    const safeName = title
+      .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+      .replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]/g, "_")
+      .replace(/_+/g, "_").replace(/^_|_$/g, "")
+      .slice(0, 80) || "blackboard_section";
+    const fname = `${safeName}.md`;
+    const fileData = Buffer.from(content, "utf-8");
+    const boundary = `----AutoSave${Date.now()}${Math.random().toString(36).slice(2)}`;
+    const parts: Buffer[] = [];
+    parts.push(Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fname}"\r\nContent-Type: text/markdown\r\n\r\n`,
+    ));
+    parts.push(fileData);
+    parts.push(Buffer.from("\r\n"));
+    for (const [n, v] of [["parent_path", "/documents"], ["filename", fname]]) {
+      parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${n}"\r\n\r\n${v}\r\n`));
+    }
+    parts.push(Buffer.from(`--${boundary}--\r\n`));
+    const res = await fetch(`${cfg.apiUrl}/workspaces/${ws}/blackboard/files/upload-multipart`, {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        Authorization: `Bearer ${cfg.token}`,
+      },
+      body: Buffer.concat(parts),
+    });
+    if (res.ok) return (await res.json()) as Record<string, unknown>;
+  } catch { /* best-effort */ }
+  return null;
+}
+
+function extractSections(markdown: string): Array<{ title: string; content: string }> {
+  const sections: Array<{ title: string; content: string }> = [];
+  const lines = markdown.split("\n");
+  let currentTitle = "";
+  let currentLines: string[] = [];
+  for (const line of lines) {
+    const m = line.match(/^#{1,2}\s+(.+)/);
+    if (m) {
+      if (currentTitle && currentLines.length > 0) {
+        sections.push({ title: currentTitle, content: currentLines.join("\n") });
+      }
+      currentTitle = m[1].trim();
+      currentLines = [line];
+    } else {
+      currentLines.push(line);
+    }
+  }
+  if (currentTitle && currentLines.length > 0) {
+    sections.push({ title: currentTitle, content: currentLines.join("\n") });
+  }
+  return sections;
+}
+
 function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
   return {
     name: "nodeskclaw_blackboard",
     description:
-      "Workspace blackboard operations: content, tasks, objectives, and BBS discussion posts.",
+      "Workspace blackboard operations: content, tasks, objectives, BBS discussion posts, AND shared files. " +
+      "Use upload_file to upload a local file to the blackboard Files tab (visible to all workspace members). " +
+      "Use list_files to see existing shared files.",
     parameters: {
       type: "object",
       properties: {
@@ -116,15 +181,19 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
             "list_objectives", "create_objective", "update_objective",
             "list_posts", "create_post", "get_post", "reply_post",
             "update_post", "delete_post", "pin_post", "unpin_post",
+            "upload_file", "list_files",
           ],
-          description: "Which blackboard operation to perform.",
+          description: "Which blackboard operation to perform. Use upload_file to upload a local file to the shared Files tab.",
         },
+        local_path: { type: "string", description: "upload_file: local file path to upload to blackboard Files tab." },
+        parent_path: { type: "string", description: "upload_file/list_files: parent directory (default /). Use /documents for documents." },
+        filename: { type: "string", description: "upload_file: target filename (defaults to basename of local_path)." },
         title: { type: "string", description: "Task/post/objective title." },
         description: { type: "string", description: "Task/objective description." },
         content: { type: "string", description: "Markdown content (update_blackboard, create_post, reply_post, update_post, patch_section)." },
         section: { type: "string", description: "patch_section: section heading to update." },
         priority: { type: "string", enum: ["urgent", "high", "medium", "low"], description: "create_task / update_task." },
-        assignee_id: { type: "string", description: "create_task: assign to agent instance ID." },
+        assignee_id: { type: "string", description: "create_task / update_task: agent instance ID or display name." },
         estimated_value: { type: "number", description: "create_task: estimated monetary value." },
         task_id: { type: "string", description: "update_task: target task ID." },
         post_id: { type: "string", description: "get_post / reply_post / update_post / delete_post / pin_post / unpin_post: target post ID." },
@@ -151,16 +220,37 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
       switch (p.action) {
         case "get_blackboard":
           return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard`));
-        case "update_blackboard":
-          return jsonResult(
-            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard`, "PUT", { content: p.content }),
-          );
-        case "patch_section":
-          return jsonResult(
-            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/sections`, "PATCH", {
-              section: p.section, content: p.content,
-            }),
-          );
+        case "update_blackboard": {
+          const ubResult = await bbApiFetch(cfg, `/workspaces/${ws}/blackboard`, "PUT", { content: p.content });
+          const fullContent = String(p.content || "");
+          const savedFiles: string[] = [];
+          for (const sec of extractSections(fullContent)) {
+            const r = await autoSaveAsFile(cfg, ws, sec.title, sec.content);
+            if (r) savedFiles.push(sec.title);
+          }
+          if (fullContent.length >= AUTO_SAVE_MIN_LENGTH && AUTO_SAVE_KEYWORDS.test(fullContent) && savedFiles.length === 0) {
+            const r = await autoSaveAsFile(cfg, ws, "blackboard_full_content", fullContent);
+            if (r) savedFiles.push("blackboard_full_content");
+          }
+          const ubOut = ubResult as Record<string, unknown>;
+          if (savedFiles.length > 0) ubOut["auto_saved_files"] = savedFiles;
+          return jsonResult(ubOut);
+        }
+        case "patch_section": {
+          const patchResult = await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/sections`, "PATCH", {
+            section: p.section, content: p.content,
+          });
+          const sectionContent = String(p.content || "");
+          const sectionTitle = String(p.section || "");
+          const saved = await autoSaveAsFile(cfg, ws, sectionTitle, sectionContent);
+          if (saved) {
+            return jsonResult({
+              ...(patchResult as Record<string, unknown>),
+              auto_saved_file: saved,
+            });
+          }
+          return jsonResult(patchResult);
+        }
         case "list_tasks": {
           const statusFilter = p.filter_status ? `?status=${p.filter_status}` : "";
           return jsonResult(await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/tasks${statusFilter}`));
@@ -251,6 +341,62 @@ function createBlackboardTool(cfg: ToolConfig): AnyAgentTool {
           return jsonResult(
             await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/posts/${p.post_id}/pin`, "DELETE"),
           );
+        case "upload_file": {
+          const localPath = p.local_path as string;
+          if (!localPath) return jsonResult({ error: "local_path is required for upload_file" });
+
+          let fileData: Buffer;
+          try {
+            fileData = await fs.readFile(localPath);
+          } catch (err) {
+            return jsonResult({ error: `Cannot read file: ${(err as Error).message}` });
+          }
+
+          const fname = (p.filename as string) || path.basename(localPath);
+          const parentPath = (p.parent_path as string) || "/";
+          const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2)}`;
+
+          const parts: Buffer[] = [];
+          parts.push(Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="file"; filename="${fname}"\r\n` +
+            `Content-Type: application/octet-stream\r\n\r\n`,
+          ));
+          parts.push(fileData);
+          parts.push(Buffer.from("\r\n"));
+          for (const [n, v] of [["parent_path", parentPath], ["filename", fname]]) {
+            parts.push(Buffer.from(
+              `--${boundary}\r\nContent-Disposition: form-data; name="${n}"\r\n\r\n${v}\r\n`,
+            ));
+          }
+          parts.push(Buffer.from(`--${boundary}--\r\n`));
+          const body = Buffer.concat(parts);
+
+          const url = `${cfg.apiUrl}/workspaces/${ws}/blackboard/files/upload-multipart`;
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                Authorization: `Bearer ${cfg.token}`,
+              },
+              body,
+            });
+            if (!res.ok) {
+              const detail = await res.text().catch(() => "");
+              return jsonResult({ error: true, status: res.status, message: detail || res.statusText });
+            }
+            return jsonResult(await res.json());
+          } catch (err) {
+            return jsonResult({ error: true, message: `Upload failed: ${(err as Error).message}` });
+          }
+        }
+        case "list_files": {
+          const parentPath = (p.parent_path as string) || "/";
+          return jsonResult(
+            await bbApiFetch(cfg, `/workspaces/${ws}/blackboard/files?parent_path=${encodeURIComponent(parentPath)}`),
+          );
+        }
         default:
           return jsonResult({ error: `Unknown action: ${p.action}` });
       }
@@ -609,6 +755,155 @@ function createChatHistoryTool(cfg: ToolConfig): AnyAgentTool {
   };
 }
 
+function createSharedFilesTool(cfg: ToolConfig): AnyAgentTool {
+  return {
+    name: "nodeskclaw_shared_files",
+    description:
+      "Manage shared files on the workspace central blackboard. " +
+      "Upload local files, list/read/delete files, create directories. " +
+      "Files uploaded here are visible to ALL workspace members in the blackboard Files tab.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "list_files",
+            "upload_file",
+            "read_file",
+            "delete_file",
+            "mkdir",
+            "get_file_url",
+          ],
+          description:
+            "list_files: list files in a directory; " +
+            "upload_file: upload a local file to shared files (requires local_path); " +
+            "read_file: read file content (requires file_id); " +
+            "delete_file: delete a file (requires file_id); " +
+            "mkdir: create a directory (requires name); " +
+            "get_file_url: get download URL (requires file_id).",
+        },
+        local_path: {
+          type: "string",
+          description: "Local file path to upload (for upload_file action).",
+        },
+        parent_path: {
+          type: "string",
+          description: "Parent directory path (default: /). Use /documents/ for document files.",
+        },
+        filename: {
+          type: "string",
+          description: "Target filename (defaults to basename of local_path).",
+        },
+        file_id: {
+          type: "string",
+          description: "File ID (for read_file, delete_file, get_file_url actions).",
+        },
+        name: {
+          type: "string",
+          description: "Directory name (for mkdir action).",
+        },
+      },
+      required: ["action"],
+    },
+    execute: async (_toolCallId, args) => {
+      const p = args as Record<string, unknown>;
+      const ws = cfg.workspaceId;
+      const basePath = `/workspaces/${ws}/blackboard/files`;
+
+      switch (p.action) {
+        case "list_files": {
+          const parentPath = (p.parent_path as string) || "/";
+          return jsonResult(
+            await bbApiFetch(cfg, `${basePath}?parent_path=${encodeURIComponent(parentPath)}`),
+          );
+        }
+        case "upload_file": {
+          const localPath = p.local_path as string;
+          if (!localPath) return jsonResult({ error: "local_path is required" });
+
+          let fileData: Buffer;
+          try {
+            fileData = await fs.readFile(localPath);
+          } catch (err) {
+            return jsonResult({ error: `Cannot read file: ${(err as Error).message}` });
+          }
+
+          const fname = (p.filename as string) || path.basename(localPath);
+          const parentPath = (p.parent_path as string) || "/";
+          const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2)}`;
+
+          const parts: Buffer[] = [];
+          parts.push(Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="file"; filename="${fname}"\r\n` +
+            `Content-Type: application/octet-stream\r\n\r\n`,
+          ));
+          parts.push(fileData);
+          parts.push(Buffer.from("\r\n"));
+
+          for (const [name, value] of [
+            ["parent_path", parentPath],
+            ["filename", fname],
+          ]) {
+            parts.push(Buffer.from(
+              `--${boundary}\r\n` +
+              `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+              `${value}\r\n`,
+            ));
+          }
+          parts.push(Buffer.from(`--${boundary}--\r\n`));
+          const body = Buffer.concat(parts);
+
+          const url = `${cfg.apiUrl}${basePath}/upload-multipart`;
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                Authorization: `Bearer ${cfg.token}`,
+              },
+              body,
+            });
+            if (!res.ok) {
+              const detail = await res.text().catch(() => "");
+              return jsonResult({ error: true, status: res.status, message: detail || res.statusText });
+            }
+            return jsonResult(await res.json());
+          } catch (err) {
+            return jsonResult({ error: true, message: `Upload failed: ${(err as Error).message}` });
+          }
+        }
+        case "read_file": {
+          const fileId = p.file_id as string;
+          if (!fileId) return jsonResult({ error: "file_id is required" });
+          return jsonResult(await bbApiFetch(cfg, `${basePath}/${fileId}/content`));
+        }
+        case "delete_file": {
+          const fileId = p.file_id as string;
+          if (!fileId) return jsonResult({ error: "file_id is required" });
+          return jsonResult(await bbApiFetch(cfg, `${basePath}/${fileId}`, "DELETE"));
+        }
+        case "mkdir": {
+          const dirName = p.name as string;
+          if (!dirName) return jsonResult({ error: "name is required" });
+          const parentPath = (p.parent_path as string) || "/";
+          return jsonResult(
+            await bbApiFetch(cfg, basePath + "/mkdir", "POST", { name: dirName, parent_path: parentPath }),
+          );
+        }
+        case "get_file_url": {
+          const fileId = p.file_id as string;
+          if (!fileId) return jsonResult({ error: "file_id is required" });
+          return jsonResult(await bbApiFetch(cfg, `${basePath}/${fileId}/url`));
+        }
+        default:
+          return jsonResult({ error: `Unknown action: ${p.action}` });
+      }
+    },
+  };
+}
+
 export function createNoDeskClawTools(config: OpenClawConfig, sessionWorkspaceId?: string): AnyAgentTool[] {
   const cfg = resolveToolConfig(config, sessionWorkspaceId);
   return [
@@ -619,5 +914,6 @@ export function createNoDeskClawTools(config: OpenClawConfig, sessionWorkspaceId
     createGeneDiscoveryTool(cfg),
     createFileDownloadTool(cfg),
     createChatHistoryTool(cfg),
+    createSharedFilesTool(cfg),
   ];
 }
