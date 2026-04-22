@@ -30,6 +30,7 @@ from app.services.channel_config_service import (
     upload_channel_plugin,
     write_channel_configs,
 )
+from app.services.llm_config_service import deploy_wecom_channel_plugin
 from app.services.unified_channel_schema import get_channel_schema
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,11 @@ async def list_available_channels(
     _, org = org_ctx
     instance = await _get_instance(instance_id, org.id, db)
     runtime = instance.runtime or "openclaw"
+    if runtime == "openclaw":
+        try:
+            await deploy_wecom_channel_plugin(instance, db)
+        except Exception as e:
+            logger.warning("自动安装 wecom 插件失败（非致命）: instance=%s error=%s", instance.name, e)
     channels = await discover_available_channels(instance, db)
 
     for ch in channels:

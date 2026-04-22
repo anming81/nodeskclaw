@@ -5,6 +5,7 @@ import base64
 import logging
 import re
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Coroutine, Literal
 
 from sqlalchemy import and_, case, func, or_, select
@@ -572,6 +573,12 @@ async def _deploy_channel_plugin(inst: Instance, db: AsyncSession, workspace_id:
         await deploy_dingtalk_channel_plugin(inst, db)
     except Exception as e:
         logger.warning("部署 dingtalk plugin 失败（非致命）: instance=%s error=%s", inst.name, e)
+
+    try:
+        from app.services.llm_config_service import deploy_wecom_channel_plugin
+        await deploy_wecom_channel_plugin(inst, db)
+    except Exception as e:
+        logger.warning("部署 wecom plugin 失败（非致命）: instance=%s error=%s", inst.name, e)
 
     try:
         from app.services.instance_service import restart_instance

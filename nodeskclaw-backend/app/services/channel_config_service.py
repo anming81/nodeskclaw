@@ -80,7 +80,7 @@ SENSITIVE_KEYS = {
     "accessToken", "encryptKey", "verificationToken", "apiKey",
     "serviceAccountKeyFile", "clientSecret",
     "app_secret", "bot_token", "app_token", "client_secret",
-    "encrypt_key", "verification_token",
+    "encrypt_key", "verification_token", "secret", "encodingAESKey", "corpSecret",
 }
 
 
@@ -352,6 +352,7 @@ async def write_channel_configs(
     """
     runtime = instance.runtime or "openclaw"
     adapter = get_config_adapter(runtime)
+    _validate_channel_configs(channel_configs)
 
     async with remote_fs(instance, db) as fs:
         try:
@@ -412,6 +413,23 @@ async def write_channel_configs(
 
     result = await adapter.restart(instance, db)
     return result
+
+
+def _validate_channel_configs(channel_configs: dict) -> None:
+    wecom_cfg = channel_configs.get("wecom")
+    if not isinstance(wecom_cfg, dict):
+        return
+    mode = (wecom_cfg.get("connectionMode") or "websocket").strip().lower()
+    if mode != "websocket":
+        return
+    bot_id = str(wecom_cfg.get("botId") or "").strip()
+    secret = str(wecom_cfg.get("secret") or "").strip()
+    if bot_id and secret:
+        return
+    raise BadRequestError(
+        message="企业微信 WebSocket 模式要求 botId 和 secret 必填",
+        message_key="errors.channel.wecom_websocket_missing",
+    )
 
 
 # ── Custom Channel Deployment ─────────────────────────────

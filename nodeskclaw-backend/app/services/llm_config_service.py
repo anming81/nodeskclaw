@@ -1104,6 +1104,47 @@ async def deploy_dingtalk_channel_plugin(
     logger.info("已部署 dingtalk channel plugin: instance=%s", instance.name)
 
 
+WECOM_PACKAGE_NAME = "@wecom/wecom-openclaw-plugin"
+WECOM_INSTALL_MARKER = ".openclaw/extensions/.wecom-plugin-installed"
+
+
+async def deploy_wecom_channel_plugin(
+    instance: Instance, db: AsyncSession,
+) -> None:
+    async with remote_fs(instance, db) as fs:
+        installed_marker = await fs.read_text(WECOM_INSTALL_MARKER)
+        if installed_marker is not None:
+            return
+
+        if instance.compute_provider == "docker":
+            from app.services.nfs_mount import DockerFS
+            assert isinstance(fs, DockerFS)
+            await fs.exec_command(
+                ["npx", "openclaw", "plugins", "install", WECOM_PACKAGE_NAME],
+            )
+        else:
+            await fs._k8s.exec_in_pod(
+                fs._ns, fs._pod,
+                ["npx", "openclaw", "plugins", "install", WECOM_PACKAGE_NAME],
+                container=fs._container,
+            )
+
+        try:
+            existing = await _read_config_file(fs)
+        except ValueError as e:
+            logger.error("deploy_wecom_plugin: openclaw.json parse error: %s", e)
+            raise
+        if existing is None:
+            existing = {}
+        plugins = existing.setdefault("plugins", {})
+        entries = plugins.setdefault("entries", {})
+        entries["wecom"] = {"enabled": True}
+        await _write_config_file(fs, existing)
+        await fs.write_text(WECOM_INSTALL_MARKER, WECOM_PACKAGE_NAME)
+
+    logger.info("已安装 wecom channel plugin: instance=%s", instance.name)
+
+
 # ── Channel Plugin Registry & Auto-Sync ──────────────────────
 
 

@@ -302,6 +302,38 @@ UNIFIED_CHANNEL_REGISTRY: dict[str, ChannelDefinition] = {
             ),
         ),
     ),
+
+    "wecom": ChannelDefinition(
+        label="WeCom / 企业微信",
+        supported_runtimes=("openclaw",),
+        order=37,
+        fields=(
+            FieldDef(
+                key="enabled", label="Enabled（启用）", type="boolean", required=False,
+                default=True,
+                runtime_key={"openclaw": "enabled"},
+            ),
+            FieldDef(
+                key="connectionMode", label="Connection Mode（连接方式）", type="select",
+                required=False, default="websocket",
+                options=(
+                    {"value": "websocket", "label": "WebSocket（长连接，推荐）"},
+                    {"value": "webhook", "label": "Webhook（需公网回调）"},
+                ),
+                runtime_key={"openclaw": "connectionMode"},
+            ),
+            FieldDef(
+                key="botId", label="Bot ID（机器人 ID）", type="string", required=False,
+                placeholder="wwxxxxxxxxxxxxxxxx",
+                runtime_key={"openclaw": "botId"},
+            ),
+            FieldDef(
+                key="secret", label="Secret（应用密钥）", type="password", required=False,
+                placeholder="企业微信应用 Secret",
+                runtime_key={"openclaw": "secret"},
+            ),
+        ),
+    ),
 }
 
 

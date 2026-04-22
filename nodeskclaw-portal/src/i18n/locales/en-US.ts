@@ -1737,6 +1737,7 @@ const enUS = {
       unsupported_format: "Only .tgz, .tar.gz and .zip formats are supported",
       extract_failed: "Failed to extract archive",
       missing_plugin_manifest: "The plugin is missing openclaw.plugin.json or channels definition",
+      wecom_websocket_missing: "WeCom websocket mode requires both botId and secret",
     },
     mcp: {
       server_not_found: "MCP server not found",

@@ -1737,6 +1737,7 @@ const zhCN = {
       unsupported_format: "仅支持 .tgz / .tar.gz / .zip 格式",
       extract_failed: "文件解压失败",
       missing_plugin_manifest: "插件缺少 openclaw.plugin.json 或未定义 channels",
+      wecom_websocket_missing: "企业微信 WebSocket 模式要求 botId 和 secret 必填",
     },
     mcp: {
       server_not_found: "MCP 服务不存在",

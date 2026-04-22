@@ -104,7 +104,7 @@ class OpenClawConfigAdapter(RuntimeConfigAdapter):
             "feishu", "dingtalk", "telegram", "discord", "slack", "whatsapp",
             "irc", "signal", "googlechat", "msteams", "matrix",
             "mattermost", "bluebubbles", "nextcloud-talk", "imessage",
-            "line", "nostr", "tlon", "twitch", "synology-chat",
+            "line", "nostr", "tlon", "twitch", "synology-chat", "wecom",
             "zalo", "zalouser",
         ]
 
