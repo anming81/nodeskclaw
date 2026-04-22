@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core.config import get_nodeskclaw_webhook_base_url, settings
 from app.models.base import not_deleted
 from app.models.invitation import Invitation, InvitationStatus
 from app.models.org_membership import OrgMembership
@@ -31,7 +31,9 @@ def _validate_email(email: str) -> bool:
 
 
 def _build_invite_url(token: str) -> str:
-    base = settings.PORTAL_BASE_URL.rstrip("/") if settings.PORTAL_BASE_URL else ""
+    portal_base_url = settings.PORTAL_BASE_URL.rstrip("/") if settings.PORTAL_BASE_URL else ""
+    fallback_base_url = get_nodeskclaw_webhook_base_url(settings)
+    base = portal_base_url or fallback_base_url
     return f"{base}/invite/{token}"
 
 
