@@ -41,6 +41,47 @@ def test_build_compose_yaml_uses_host_data_dir_for_bind_source(monkeypatch) -> N
     }]
 
 
+def test_build_compose_yaml_uses_arm64_platform_for_arm_image_tag() -> None:
+    config = docker_provider.InstanceComputeConfig(
+        instance_id="instance-1",
+        name="demo",
+        namespace="default",
+        slug="demo",
+        image_version="v2026.4.5-arm",
+        runtime="openclaw",
+        gateway_port=3000,
+        env_vars={"DOCKER_IMAGE": "harbor.everoffice.cn/appcenter/deskclaw-openclaw:v2026.4.5-arm"},
+        mem_limit=None,
+        cpu_limit=None,
+        companion=None,
+    )
+
+    compose = docker_provider._build_compose_yaml(config)
+    assert compose["services"]["agent"]["platform"] == "linux/arm64"
+
+
+def test_build_compose_yaml_prefers_explicit_platform_from_env() -> None:
+    config = docker_provider.InstanceComputeConfig(
+        instance_id="instance-1",
+        name="demo",
+        namespace="default",
+        slug="demo",
+        image_version="latest",
+        runtime="openclaw",
+        gateway_port=3000,
+        env_vars={
+            "DOCKER_IMAGE": "harbor.everoffice.cn/appcenter/deskclaw-openclaw:v2026.4.5-arm",
+            "DOCKER_PLATFORM": "linux/amd64",
+        },
+        mem_limit=None,
+        cpu_limit=None,
+        companion=None,
+    )
+
+    compose = docker_provider._build_compose_yaml(config)
+    assert compose["services"]["agent"]["platform"] == "linux/amd64"
+
+
 def test_resolve_compose_path_prefers_current_container_path(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(docker_provider, "DOCKER_DATA_DIR", tmp_path)
     monkeypatch.setattr(docker_provider, "DOCKER_HOST_DATA_DIR", r"C:\Users\tester\.nodeskclaw\docker-instances")
@@ -149,6 +190,50 @@ async def test_seed_template_from_image_uses_runtime_template_rel(tmp_path, monk
         ("docker", "cp", f"cid-123:/root/.openclaw/openclaw.json.template", str(tmp_path / "openclaw.json.template")),
         ("docker", "rm", "cid-123"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_seed_template_from_image_uses_arm64_platform_for_arm_tag(tmp_path, monkeypatch) -> None:
+    calls = []
+
+    class _Proc:
+        def __init__(self, returncode: int = 0, stdout: bytes = b"", stderr: bytes = b""):
+            self.returncode = returncode
+            self._stdout = stdout
+            self._stderr = stderr
+
+        async def communicate(self):
+            return self._stdout, self._stderr
+
+        async def wait(self):
+            return self.returncode
+
+    async def _fake_exec(*args, **kwargs):
+        calls.append(args)
+        if args[:2] == ("docker", "create"):
+            return _Proc(stdout=b"cid-123\n")
+        return _Proc()
+
+    monkeypatch.setattr(docker_provider.asyncio, "create_subprocess_exec", _fake_exec)
+
+    config = docker_provider.InstanceComputeConfig(
+        instance_id="instance-1",
+        name="demo",
+        namespace="default",
+        slug="demo",
+        image_version="v2026.4.5-arm",
+        runtime="openclaw",
+        gateway_port=3000,
+        env_vars={"DOCKER_IMAGE": "harbor.everoffice.cn/appcenter/deskclaw-openclaw:v2026.4.5-arm"},
+        mem_limit=None,
+        cpu_limit=None,
+        companion=None,
+    )
+
+    await docker_provider._seed_template_from_image(config, tmp_path)
+
+    create_call = calls[0]
+    assert create_call[0:4] == ("docker", "create", "--platform", "linux/arm64")
 
 
 @pytest.mark.asyncio

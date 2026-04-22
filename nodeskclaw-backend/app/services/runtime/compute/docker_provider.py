@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _LOCALHOST_RE = re.compile(r"(https?://)(localhost|127\.0\.0\.1)(:\d+)?")
 _WINDOWS_HOST_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+_ARM_IMAGE_TAG_RE = re.compile(r"-(arm|arm64)(?:[._-]|$)", re.IGNORECASE)
 
 
 def _docker_endpoint_host() -> str:
@@ -117,6 +118,18 @@ def _resolve_compose_path(slug: str, stored_path: str) -> str:
     return current_path
 
 
+def _resolve_docker_platform(config: InstanceComputeConfig) -> str:
+    explicit_platform = str(config.env_vars.get("DOCKER_PLATFORM", "")).strip()
+    if explicit_platform:
+        return explicit_platform
+
+    image = str(config.env_vars.get("DOCKER_IMAGE", f"deskclaw:{config.image_version}"))
+    image_ref = image.rsplit(":", 1)[-1] if ":" in image else image
+    if _ARM_IMAGE_TAG_RE.search(image_ref):
+        return "linux/arm64"
+    return "linux/amd64"
+
+
 async def _seed_template_from_image(config: InstanceComputeConfig, data_dir: Path) -> None:
     """从镜像中提取配置模板到宿主机 data 目录（仅首次部署时需要）。
 
@@ -141,11 +154,12 @@ async def _seed_template_from_image(config: InstanceComputeConfig, data_dir: Pat
         return
 
     image = config.env_vars.get("DOCKER_IMAGE", f"deskclaw:{config.image_version}")
+    platform = _resolve_docker_platform(config)
     tmp_container = f"tmpl-seed-{config.slug}-{uuid.uuid4().hex[:8]}"
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "create", "--platform", "linux/amd64", "--name", tmp_container, image,
+            "docker", "create", "--platform", platform, "--name", tmp_container, image,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -189,6 +203,7 @@ def _build_compose_yaml(config: InstanceComputeConfig) -> dict:
         for k, v in config.env_vars.items()
     }
     host_port = env.get("DOCKER_HOST_PORT", "3000")
+    platform = _resolve_docker_platform(config)
 
     from app.services.runtime.registries.runtime_registry import RUNTIME_REGISTRY
     rt_spec = RUNTIME_REGISTRY.get(config.runtime)
@@ -206,7 +221,7 @@ def _build_compose_yaml(config: InstanceComputeConfig) -> dict:
             "target": container_data_dir,
         }],
         "restart": "unless-stopped",
-        "platform": "linux/amd64",
+        "platform": platform,
         "networks": [f"{config.slug}-net"],
         "extra_hosts": ["host.docker.internal:host-gateway"],
     }
@@ -237,7 +252,7 @@ def _build_compose_yaml(config: InstanceComputeConfig) -> dict:
             "environment": config.companion.env_vars,
             "ports": [str(config.companion.port)],
             "restart": "unless-stopped",
-            "platform": "linux/amd64",
+            "platform": platform,
             "depends_on": ["agent"],
             "networks": [f"{config.slug}-net"],
             "extra_hosts": ["host.docker.internal:host-gateway"],
