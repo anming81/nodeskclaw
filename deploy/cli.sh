@@ -289,7 +289,7 @@ EODF
   log "[$(ctag "$component")] 推送镜像..."
   if ! docker push "$image"; then
     err "[$(ctag "$component")] 镜像推送失败"
-    return 1
+    return 2
   fi
 
   ok "[$(ctag "$component")] $image"
@@ -379,14 +379,21 @@ cmd_deploy() {
   log "Namespace: $NAMESPACE"
   [[ -n "$KUBE_CONTEXT" ]] && log "K8s 上下文: $KUBE_CONTEXT"
   echo ""
+  local push_failed_components=()
 
   for t in "${targets[@]}"; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     if [[ "$DEPLOY_ONLY" != true ]]; then
-      if ! build_and_push "$t"; then
+      local build_status=0
+      build_and_push "$t" || build_status=$?
+      if [[ "$build_status" -eq 1 ]]; then
         err "[$(ctag "$t")] 构建失败，中止后续组件"
         exit 1
+      elif [[ "$build_status" -eq 2 ]]; then
+        warn "[$(ctag "$t")] 推送失败，继续构建后续组件"
+        push_failed_components+=("$t")
+        continue
       fi
     fi
 
@@ -397,6 +404,11 @@ cmd_deploy() {
       fi
     fi
   done
+
+  if [[ "${#push_failed_components[@]}" -gt 0 ]]; then
+    err "以下组件镜像推送失败: ${push_failed_components[*]}"
+    exit 1
+  fi
 
   echo ""
   ok "全部完成（标签: ${TAG}${NAMESPACE:+, Namespace: ${NAMESPACE}}）"
