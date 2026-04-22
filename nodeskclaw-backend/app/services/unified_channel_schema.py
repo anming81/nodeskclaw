@@ -235,6 +235,56 @@ UNIFIED_CHANNEL_REGISTRY: dict[str, ChannelDefinition] = {
         ),
     ),
 
+
+
+    # ── WeCom / 企业微信 ─────────────────────────────────────
+    "wecom": ChannelDefinition(
+        label="WeCom / 企业微信",
+        supported_runtimes=("openclaw", "nanobot"),
+        order=37,
+        fields=(
+            FieldDef(
+                key="botId", label="Bot ID（机器人 ID）", type="string", required=True,
+                placeholder="aibxxxx",
+                runtime_key={"openclaw": "botId", "nanobot": "botId"},
+            ),
+            FieldDef(
+                key="secret", label="Secret（机器人密钥）", type="password", required=True,
+                placeholder="企业微信智能机器人 Secret",
+                runtime_key={"openclaw": "secret", "nanobot": "secret"},
+            ),
+            FieldDef(
+                key="websocketUrl", label="WebSocket URL（长连接地址）", type="string",
+                required=False, default="wss://openws.work.weixin.qq.com",
+                runtime_key={"openclaw": "websocketUrl", "nanobot": "websocketUrl"},
+            ),
+            FieldDef(
+                key="allowFrom", label="Allow From（允许列表）", type="string_list",
+                required=False,
+                runtime_key={"openclaw": "allowFrom", "nanobot": "allowFrom"},
+            ),
+            FieldDef(
+                key="dmPolicy", label="DM Policy（私聊策略）", type="select",
+                required=False, default="open",
+                options=(
+                    {"value": "open", "label": "open（所有人可用）"},
+                    {"value": "allowFrom", "label": "allowFrom（白名单）"},
+                ),
+                runtime_key={"openclaw": "dmPolicy", "nanobot": "dmPolicy"},
+            ),
+            FieldDef(
+                key="groupPolicy", label="Group Policy（群聊策略）", type="select",
+                required=False, default="mention",
+                options=(
+                    {"value": "mention", "label": "mention（需@提及）"},
+                    {"value": "open", "label": "open（开放）"},
+                    {"value": "allowlist", "label": "allowlist（白名单）"},
+                    {"value": "disabled", "label": "disabled（禁用群聊）"},
+                ),
+                runtime_key={"openclaw": "groupPolicy", "nanobot": "groupPolicy"},
+            ),
+        ),
+    ),
     # ── DingTalk / 钉钉 ─────────────────────────────────────
     "dingtalk": ChannelDefinition(
         label="DingTalk / 钉钉",

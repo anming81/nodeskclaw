@@ -117,6 +117,17 @@ class TestEnsureChannelPluginIntegrity:
         assert _CHANNEL_PLUGIN_PATHS["learning"] in config["plugins"]["load"]["paths"]
         assert config["plugins"]["entries"]["learning"] == {"enabled": True}
 
+
+
+    def test_covers_wecom_channel(self):
+        config = {
+            "channels": {"wecom": {"accounts": {"default": {}}}},
+            "plugins": {"load": {"paths": []}, "entries": {}},
+        }
+        ensure_channel_plugin_integrity(config)
+
+        assert _CHANNEL_PLUGIN_PATHS["wecom"] in config["plugins"]["load"]["paths"]
+        assert config["plugins"]["entries"]["wecom"] == {"enabled": True}
     def test_no_duplicate_when_already_present(self):
         nodeskclaw_path = _CHANNEL_PLUGIN_PATHS["nodeskclaw"]
         config = {
