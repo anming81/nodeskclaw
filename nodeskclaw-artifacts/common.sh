@@ -29,13 +29,14 @@ check_docker() {
 }
 
 # ── 构建镜像 ─────────────────────────────────────
-# docker_build <context_dir> <tag> [build_args...]
+# docker_build <context_dir> <tag> <platform> [build_args...]
 docker_build() {
   local context_dir="$1"; shift
   local tag="$1"; shift
+  local platform="$1"; shift
   local build_args=("$@")
 
-  docker build --platform linux/amd64 \
+  docker build --platform "${platform}" \
     --build-arg http_proxy= \
     --build-arg https_proxy= \
     --build-arg HTTP_PROXY= \
@@ -89,7 +90,7 @@ print_done() {
 }
 
 # ── 解析通用参数 ─────────────────────────────────
-# 调用后设置: VERSION, BUILD_ONLY, SKIP_VERIFY, WITH_SECURITY, BASE_TAG, MIRRORS
+# 调用后设置: VERSION, BUILD_ONLY, SKIP_VERIFY, WITH_SECURITY, BASE_TAG, MIRRORS, TARGET_PLATFORM
 parse_common_args() {
   VERSION=""
   BUILD_ONLY=false
@@ -97,6 +98,7 @@ parse_common_args() {
   WITH_SECURITY=false
   BASE_TAG=""
   MIRRORS=""
+  TARGET_PLATFORM="linux/amd64"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -124,9 +126,24 @@ parse_common_args() {
         MIRRORS="$2"
         shift 2
         ;;
+      --platform)
+        case "$2" in
+          amd64|linux/amd64)
+            TARGET_PLATFORM="linux/amd64"
+            ;;
+          arm64|linux/arm64)
+            TARGET_PLATFORM="linux/arm64"
+            ;;
+          *)
+            log_error "不支持的平台: $2（仅支持 amd64 或 arm64）"
+            exit 1
+            ;;
+        esac
+        shift 2
+        ;;
       *)
         echo "未知参数: $1"
-        echo "用法: $0 [--version <ver>] [--build-only] [--skip-verify] [--with-security] [--base-tag <tag>] [--mirrors <preset>]"
+        echo "用法: $0 [--version <ver>] [--build-only] [--skip-verify] [--with-security] [--base-tag <tag>] [--mirrors <preset>] [--platform <amd64|arm64>]"
         exit 1
         ;;
     esac

@@ -2,9 +2,9 @@
 # build.sh — DeskClaw 统一镜像构建入口
 #
 # 用法:
-#   ./build.sh <engine> [--version <ver>] [--build-only] [--skip-verify]
+#   ./build.sh <engine> [--version <ver>] [--build-only] [--skip-verify] [--platform <amd64|arm64>]
 #   ./build.sh <engine> --with-security --base-tag <tag> [--build-only]
-#   ./build.sh all [--build-only] [--skip-verify]
+#   ./build.sh all [--build-only] [--skip-verify] [--platform <amd64|arm64>]
 #
 # 省略 --version 时自动检测各引擎最新稳定版（openclaw→npm, nanobot→PyPI）
 #
@@ -44,7 +44,7 @@ print(stable[-1] if stable else '')"
 
 ENGINE="$1"; shift || true
 if [ -z "${ENGINE}" ]; then
-  log_error "用法: ./build.sh <engine> [--version <ver>] [--build-only] [--skip-verify]"
+  log_error "用法: ./build.sh <engine> [--version <ver>] [--build-only] [--skip-verify] [--platform <amd64|arm64>]"
   log_info "可用引擎: openclaw, nanobot, all"
   exit 1
 fi
@@ -89,9 +89,9 @@ if [ "${WITH_SECURITY}" = true ]; then
   BASE_TAG="${BASE_TAG#v}"
   IMAGE_TAG="v${BASE_TAG}-sec"
 
-  print_build_summary "${ENGINE} (security)" "${BASE_TAG}" "${REGISTRY}" "linux/amd64" "security"
+  print_build_summary "${ENGINE} (security)" "${BASE_TAG}" "${REGISTRY}" "${TARGET_PLATFORM}" "security"
 
-  docker_build "${CONTEXT_DIR}" "${REGISTRY}:${IMAGE_TAG}" \
+  docker_build "${CONTEXT_DIR}" "${REGISTRY}:${IMAGE_TAG}" "${TARGET_PLATFORM}" \
     -f "${ENGINE_DIR}/Dockerfile.security" \
     --build-arg BASE_TAG="v${BASE_TAG}" \
     --build-arg BASE_REGISTRY="${REGISTRY}"
@@ -129,11 +129,11 @@ else
 
   BUILD_ARG_VERSION="${VERSION}"
 
-  print_build_summary "${ENGINE}" "${VERSION}" "${REGISTRY}" "linux/amd64" "base"
+  print_build_summary "${ENGINE}" "${VERSION}" "${REGISTRY}" "${TARGET_PLATFORM}" "base"
 
   ENGINE_UPPER="$(echo "${ENGINE}" | tr '[:lower:]' '[:upper:]')"
 
-  docker_build "${ENGINE_DIR}" "${REGISTRY}:${IMAGE_TAG}" \
+  docker_build "${ENGINE_DIR}" "${REGISTRY}:${IMAGE_TAG}" "${TARGET_PLATFORM}" \
     --build-arg "${ENGINE_UPPER}_VERSION=${BUILD_ARG_VERSION}" \
     --build-arg IMAGE_VERSION="${IMAGE_TAG}"
 fi
@@ -143,13 +143,13 @@ if [ "${SKIP_VERIFY}" = false ] && [ "${WITH_SECURITY}" = false ]; then
   log_info "验证镜像（Apple Silicon 上较慢，可用 --skip-verify 跳过）..."
   case "${ENGINE}" in
     openclaw)
-      echo "  Node.js: $(docker run --rm --platform linux/amd64 "${REGISTRY}:${IMAGE_TAG}" node --version)"
-      echo "  OpenClaw: $(docker run --rm --platform linux/amd64 "${REGISTRY}:${IMAGE_TAG}" openclaw --version 2>/dev/null || echo '(需启动后验证)')"
-      echo "  版本标记: $(docker run --rm --platform linux/amd64 "${REGISTRY}:${IMAGE_TAG}" cat /root/.openclaw-version)"
+      echo "  Node.js: $(docker run --rm --platform ${TARGET_PLATFORM} "${REGISTRY}:${IMAGE_TAG}" node --version)"
+      echo "  OpenClaw: $(docker run --rm --platform ${TARGET_PLATFORM} "${REGISTRY}:${IMAGE_TAG}" openclaw --version 2>/dev/null || echo '(需启动后验证)')"
+      echo "  版本标记: $(docker run --rm --platform ${TARGET_PLATFORM} "${REGISTRY}:${IMAGE_TAG}" cat /root/.openclaw-version)"
       ;;
     nanobot)
-      echo "  Python: $(docker run --rm --platform linux/amd64 "${REGISTRY}:${IMAGE_TAG}" python --version)"
-      echo "  Nanobot: $(docker run --rm --platform linux/amd64 "${REGISTRY}:${IMAGE_TAG}" pip show nanobot-ai 2>/dev/null | grep Version || echo '(需启动后验证)')"
+      echo "  Python: $(docker run --rm --platform ${TARGET_PLATFORM} "${REGISTRY}:${IMAGE_TAG}" python --version)"
+      echo "  Nanobot: $(docker run --rm --platform ${TARGET_PLATFORM} "${REGISTRY}:${IMAGE_TAG}" pip show nanobot-ai 2>/dev/null | grep Version || echo '(需启动后验证)')"
       ;;
   esac
 fi
