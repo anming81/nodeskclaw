@@ -24,6 +24,8 @@ export type ResolvedWeComAccount = {
 
 export type WeComStreamFrame = {
   cmd: string;
+  errcode?: number;
+  errmsg?: string;
   headers?: Record<string, string>;
   body?: Record<string, unknown>;
 };

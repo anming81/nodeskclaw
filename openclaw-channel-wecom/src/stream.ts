@@ -2,21 +2,48 @@ import type { ResolvedWeComAccount, WeComInboundMessage, WeComStreamFrame } from
 
 const RECONNECT_BASE_MS = 3_000;
 const RECONNECT_MAX_MS = 60_000;
-const WEBSOCKET_CONNECT_TIMEOUT_MS = 15_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 type MessageHandler = (msg: WeComInboundMessage, account: ResolvedWeComAccount) => void;
+type WsLike = {
+  readyState: number;
+  send: (data: string) => void;
+  close: () => void;
+  onopen?: () => void;
+  onmessage?: (event: { data: unknown }) => void;
+  onerror?: (event: unknown) => void;
+  onclose?: (event: { code?: number; reason?: string }) => void;
+  addEventListener?: (name: string, cb: (...args: any[]) => void) => void;
+  removeEventListener?: (name: string, cb: (...args: any[]) => void) => void;
+  on?: (name: string, cb: (...args: any[]) => void) => void;
+  off?: (name: string, cb: (...args: any[]) => void) => void;
+  pong?: () => void;
+};
 
 function buildReqId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+async function createWebSocket(url: string): Promise<WsLike> {
+  try {
+    const wsModule = await import("ws");
+    const WS = (wsModule as any).WebSocket ?? (wsModule as any).default;
+    if (WS) {
+      return new WS(url) as WsLike;
+    }
+  } catch {}
+
+  return new WebSocket(url) as unknown as WsLike;
+}
+
 export class WeComStreamClient {
   private account: ResolvedWeComAccount;
-  private ws: WebSocket | null = null;
+  private ws: WsLike | null = null;
   private onMessage: MessageHandler;
   private stopped = false;
   private reconnectAttempt = 0;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(account: ResolvedWeComAccount, onMessage: MessageHandler) {
     this.account = account;
@@ -26,7 +53,7 @@ export class WeComStreamClient {
   async start(): Promise<void> {
     this.stopped = false;
     this.reconnectAttempt = 0;
-    this.connect();
+    await this.connect();
   }
 
   stop(): void {
@@ -35,64 +62,79 @@ export class WeComStreamClient {
       clearTimeout(this.connectTimer);
       this.connectTimer = null;
     }
+    this.stopHeartbeat();
     if (this.ws) {
       try { this.ws.close(); } catch {}
       this.ws = null;
     }
   }
 
-  private connect(): void {
+  private async connect(): Promise<void> {
     if (this.stopped) return;
 
     try {
-      this.setupWebSocket();
+      const ws = await createWebSocket(this.account.websocketUrl);
+      this.setupWebSocket(ws);
+      this.ws = ws;
     } catch (err) {
       console.error("[wecom-stream] Failed to create WebSocket:", err);
       this.scheduleReconnect();
     }
   }
 
-  private setupWebSocket(): void {
-    const ws = new WebSocket(this.account.websocketUrl);
-    this.ws = ws;
-
-    const connectTimeout = setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) {
-        try { ws.close(); } catch {}
-      }
-    }, WEBSOCKET_CONNECT_TIMEOUT_MS);
-
-    ws.onopen = () => {
-      clearTimeout(connectTimeout);
+  private setupWebSocket(ws: WsLike): void {
+    const onOpen = () => {
       this.reconnectAttempt = 0;
       console.log("[wecom-stream] WebSocket connected");
       this.sendSubscribe(ws);
+      this.startHeartbeat(ws);
     };
 
-    ws.onmessage = (event: MessageEvent) => {
+    const onMessage = (event: { data: unknown }) => {
       try {
-        const frame = JSON.parse(String(event.data)) as WeComStreamFrame;
+        const raw = typeof event.data === "string" ? event.data : String(event.data ?? "");
+        const frame = JSON.parse(raw) as WeComStreamFrame;
         this.handleFrame(frame, ws);
       } catch (err) {
         console.error("[wecom-stream] Failed to parse frame:", err);
       }
     };
 
-    ws.onerror = (event: Event) => {
+    const onError = (event: unknown) => {
       console.error("[wecom-stream] WebSocket error:", event);
     };
 
-    ws.onclose = () => {
-      clearTimeout(connectTimeout);
-      console.log("[wecom-stream] WebSocket closed");
+    const onClose = (event: { code?: number; reason?: string }) => {
+      this.stopHeartbeat();
+      const code = event?.code ?? 0;
+      const reason = event?.reason || "";
+      console.warn(`[wecom-stream] WebSocket closed: code=${code} reason=${reason}`);
       this.ws = null;
       if (!this.stopped) {
         this.scheduleReconnect();
       }
     };
+
+    if (ws.on) {
+      ws.on("open", onOpen);
+      ws.on("message", (data: unknown) => onMessage({ data }));
+      ws.on("error", onError);
+      ws.on("close", (code: number, reason: any) => {
+        onClose({ code, reason: reason?.toString?.() || "" });
+      });
+      ws.on("ping", () => {
+        try { ws.pong?.(); } catch {}
+      });
+      return;
+    }
+
+    ws.onopen = onOpen;
+    ws.onmessage = onMessage;
+    ws.onerror = onError;
+    ws.onclose = onClose;
   }
 
-  private sendSubscribe(ws: WebSocket): void {
+  private sendSubscribe(ws: WsLike): void {
     const frame: WeComStreamFrame = {
       cmd: "aibot_subscribe",
       headers: { req_id: buildReqId("subscribe") },
@@ -102,20 +144,40 @@ export class WeComStreamClient {
       },
     };
 
-    try {
-      ws.send(JSON.stringify(frame));
-    } catch (err) {
-      console.error("[wecom-stream] Failed to send subscribe:", err);
+    this.sendFrame(ws, frame, "subscribe");
+  }
+
+  private startHeartbeat(ws: WsLike): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (ws.readyState !== 1) return;
+      const frame: WeComStreamFrame = {
+        cmd: "ping",
+        headers: { req_id: buildReqId("ping") },
+        body: {},
+      };
+      this.sendFrame(ws, frame, "heartbeat");
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
   }
 
-  private handleFrame(frame: WeComStreamFrame, ws: WebSocket): void {
-    if (frame.cmd === "ping") {
-      this.sendPong(ws);
-      return;
+  private sendFrame(ws: WsLike, frame: WeComStreamFrame, action: string): void {
+    if (ws.readyState !== 1) return;
+    try {
+      ws.send(JSON.stringify(frame));
+    } catch (err) {
+      console.error(`[wecom-stream] Failed to send ${action}:`, err);
     }
+  }
 
-    if (frame.cmd === "aibot_callback" || frame.cmd === "aibot_event_callback") {
+  private handleFrame(frame: WeComStreamFrame, ws: WsLike): void {
+    if (frame.cmd === "aibot_msg_callback" || frame.cmd === "aibot_event_callback") {
       try {
         this.onMessage(frame.body as WeComInboundMessage, this.account);
       } catch (err) {
@@ -124,26 +186,18 @@ export class WeComStreamClient {
       return;
     }
 
-    if (frame.cmd === "aibot_subscribe") {
-      const errCode = Number(frame.body?.errcode ?? 0);
-      if (errCode !== 0) {
-        console.error("[wecom-stream] Subscribe failed:", frame.body);
-      }
+    if (frame.cmd === "ping") {
+      const pong: WeComStreamFrame = {
+        cmd: "pong",
+        headers: { req_id: buildReqId("pong") },
+        body: {},
+      };
+      this.sendFrame(ws, pong, "pong");
+      return;
     }
-  }
 
-  private sendPong(ws: WebSocket): void {
-    if (ws.readyState !== WebSocket.OPEN) return;
-    const frame: WeComStreamFrame = {
-      cmd: "pong",
-      headers: { req_id: buildReqId("pong") },
-      body: {},
-    };
-
-    try {
-      ws.send(JSON.stringify(frame));
-    } catch (err) {
-      console.error("[wecom-stream] Failed to send pong:", err);
+    if (typeof frame.errcode === "number" && frame.errcode !== 0) {
+      console.error(`[wecom-stream] Server returned error: errcode=${frame.errcode} errmsg=${frame.errmsg || ""}`);
     }
   }
 
@@ -157,6 +211,10 @@ export class WeComStreamClient {
     this.reconnectAttempt++;
 
     console.log(`[wecom-stream] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
-    this.connectTimer = setTimeout(() => this.connect(), delay);
+    this.connectTimer = setTimeout(() => {
+      this.connect().catch((err) => {
+        console.error("[wecom-stream] Reconnect failed:", err);
+      });
+    }, delay);
   }
 }
