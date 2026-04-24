@@ -1041,6 +1041,18 @@ DINGTALK_PLUGIN_FILES = [
     "src/send.ts",
 ]
 
+WECOM_PLUGIN_DIR = "openclaw-channel-wecom"
+WECOM_PLUGIN_FILES = [
+    "index.ts",
+    "package.json",
+    "openclaw.plugin.json",
+    "src/channel.ts",
+    "src/runtime.ts",
+    "src/types.ts",
+    "src/stream.ts",
+    "src/send.ts",
+]
+
 
 def _get_dingtalk_plugin_source_dir() -> Path:
     candidates = [
@@ -1104,6 +1116,68 @@ async def deploy_dingtalk_channel_plugin(
     logger.info("已部署 dingtalk channel plugin: instance=%s", instance.name)
 
 
+def _get_wecom_plugin_source_dir() -> Path:
+    candidates = [
+        Path(__file__).resolve().parents[3] / WECOM_PLUGIN_DIR,
+        Path("/app") / WECOM_PLUGIN_DIR,
+    ]
+    for p in candidates:
+        if p.exists() and (p / "index.ts").exists():
+            return p
+    raise FileNotFoundError(
+        f"WeCom plugin source not found. Checked: {[str(c) for c in candidates]}"
+    )
+
+
+async def _deploy_wecom_plugin_files(fs: RemoteFS, plugin_source: Path) -> None:
+    """Copy wecom channel plugin files (backward-compat wrapper)."""
+    await _deploy_plugin_files_generic(
+        fs, plugin_source, CHANNEL_PLUGIN_REGISTRY["wecom"],
+    )
+
+
+def _inject_wecom_plugin_path(config: dict) -> None:
+    plugins = config.setdefault("plugins", {})
+    load = plugins.setdefault("load", {})
+    paths = load.setdefault("paths", [])
+    old_relative = f".openclaw/extensions/{WECOM_PLUGIN_DIR}"
+    if old_relative in paths:
+        paths.remove(old_relative)
+    plugin_path = f"/root/.openclaw/extensions/{WECOM_PLUGIN_DIR}"
+    if plugin_path not in paths:
+        paths.append(plugin_path)
+
+    entries = plugins.setdefault("entries", {})
+    entries["wecom"] = {"enabled": True}
+
+
+async def deploy_wecom_channel_plugin(
+    instance: Instance, db: AsyncSession,
+) -> None:
+    try:
+        plugin_source = _get_wecom_plugin_source_dir()
+    except FileNotFoundError:
+        logger.warning("WeCom plugin source not found, skipping deployment")
+        return
+
+    async with remote_fs(instance, db) as fs:
+        await _deploy_wecom_plugin_files(fs, plugin_source)
+
+        try:
+            existing = await _read_config_file(fs)
+        except ValueError as e:
+            logger.error("deploy_wecom_plugin: openclaw.json parse error: %s", e)
+            raise
+
+        if existing is None:
+            existing = {}
+
+        _inject_wecom_plugin_path(existing)
+        await _write_config_file(fs, existing)
+
+    logger.info("已部署 wecom channel plugin: instance=%s", instance.name)
+
+
 # ── Channel Plugin Registry & Auto-Sync ──────────────────────
 
 
@@ -1132,6 +1206,12 @@ CHANNEL_PLUGIN_REGISTRY: dict[str, ChannelPluginSpec] = {
         plugin_id="dingtalk",
         dir_name=DINGTALK_PLUGIN_DIR,
         file_list=tuple(DINGTALK_PLUGIN_FILES),
+        min_openclaw_version=(2026, 1, 0),
+    ),
+    "wecom": ChannelPluginSpec(
+        plugin_id="wecom",
+        dir_name=WECOM_PLUGIN_DIR,
+        file_list=tuple(WECOM_PLUGIN_FILES),
         min_openclaw_version=(2026, 1, 0),
     ),
 }
