@@ -24,6 +24,7 @@ SYSTEM_CHANNEL_IDS = {"nodeskclaw", "learning"}
 CHANNEL_LABELS: dict[str, str] = {
     "feishu": "Feishu / 飞书",
     "dingtalk": "DingTalk / 钉钉",
+    "wecom": "WeCom / 企业微信",
     "slack": "Slack",
     "telegram": "Telegram",
     "discord": "Discord",
@@ -49,6 +50,7 @@ CHANNEL_LABELS: dict[str, str] = {
 CHANNEL_ORDER: dict[str, int] = {
     "feishu": 35,
     "dingtalk": 36,
+    "wecom": 37,
     "slack": 40,
     "telegram": 45,
     "discord": 50,
@@ -409,6 +411,30 @@ async def write_channel_configs(
 
     logger.info("已写入 Channel 配置: instance=%s runtime=%s channels=%s",
                 instance.name, runtime, list(channel_configs.keys()))
+
+    if runtime == "openclaw":
+        deployers = {}
+        try:
+            from app.services.llm_config_service import (
+                deploy_dingtalk_channel_plugin,
+                deploy_wecom_channel_plugin,
+            )
+            deployers = {
+                "dingtalk": deploy_dingtalk_channel_plugin,
+                "wecom": deploy_wecom_channel_plugin,
+            }
+        except Exception as e:
+            logger.warning("加载内置 Channel 部署器失败（非致命）: %s", e)
+
+        for cid in channel_configs.keys():
+            deployer = deployers.get(cid)
+            if not deployer:
+                continue
+            try:
+                await deployer(instance, db)
+            except Exception as e:
+                logger.warning("部署 %s plugin 失败（非致命）: instance=%s error=%s",
+                               cid, instance.name, e)
 
     result = await adapter.restart(instance, db)
     return result
