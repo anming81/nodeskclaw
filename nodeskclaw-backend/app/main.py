@@ -354,8 +354,11 @@ async def lifespan(app: FastAPI):
                 import json as _seed_json
                 from app.models.gene import Gene as _SeedGene, Genome as _SeedGenome
                 from app.models.base import not_deleted as _seed_not_deleted
+                from app.startup.builtin_skills import seed_builtin_skills
 
                 _seed_dir = pathlib.Path(__file__).parent / "data" / "gene_templates"
+
+                await seed_builtin_skills(async_session_factory)
 
                 _gene_files = [
                     "mcp_blackboard_tools.json",

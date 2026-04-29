@@ -33,6 +33,7 @@ COPY nodeskclaw-backend/pyproject.toml nodeskclaw-backend/uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY nodeskclaw-backend/ .
+COPY nodeskclaw-backend/app/data/builtin_skills/ ./app/data/builtin_skills/
 COPY openclaw-channel-nodeskclaw/ ./openclaw-channel-nodeskclaw/
 COPY openclaw-channel-dingtalk/ ./openclaw-channel-dingtalk/
 COPY features.yaml ./features.yaml

@@ -1,0 +1,38 @@
+[
+  {
+    "slug": "viral-hunter",
+    "name": "viral-hunter",
+    "description": "爆款猎手 - 负责全网爆款发现与候选池构建",
+    "category": "workflow",
+    "tags": ["builtin", "workflow", "content"],
+    "version": "1.0.0",
+    "tool_allow": ["nodeskclaw_blackboard"]
+  },
+  {
+    "slug": "viral-analyzer",
+    "name": "viral-analyzer",
+    "description": "爆款拆解师 - 多维度拆解候选爆款并输出结论",
+    "category": "workflow",
+    "tags": ["builtin", "workflow", "content"],
+    "version": "1.0.0",
+    "tool_allow": ["nodeskclaw_blackboard"]
+  },
+  {
+    "slug": "script-creator",
+    "name": "script-creator",
+    "description": "脚本策划师 - 将拆解结论转为可拍摄脚本",
+    "category": "workflow",
+    "tags": ["builtin", "workflow", "content"],
+    "version": "1.0.0",
+    "tool_allow": ["nodeskclaw_blackboard", "nodeskclaw_shared_files"]
+  },
+  {
+    "slug": "quality-inspector",
+    "name": "quality-inspector",
+    "description": "质量审查官 - 审核脚本完整性并推动发布",
+    "category": "workflow",
+    "tags": ["builtin", "workflow", "content"],
+    "version": "1.0.0",
+    "tool_allow": ["nodeskclaw_blackboard"]
+  }
+]
