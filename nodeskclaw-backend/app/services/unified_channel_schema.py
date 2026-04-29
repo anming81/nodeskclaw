@@ -302,6 +302,70 @@ UNIFIED_CHANNEL_REGISTRY: dict[str, ChannelDefinition] = {
             ),
         ),
     ),
+
+    # ── WeCom / 企业微信 ─────────────────────────────────────
+    "wecom": ChannelDefinition(
+        label="WeCom / 企业微信",
+        supported_runtimes=("openclaw", "nanobot"),
+        order=37,
+        fields=(
+            FieldDef(
+                key="botId", label="Bot ID（机器人 ID）", type="string", required=True,
+                placeholder="企业微信机器人 Bot ID",
+                runtime_key={"openclaw": "botId", "nanobot": "botId"},
+            ),
+            FieldDef(
+                key="secret", label="Secret（机器人密钥）", type="password", required=True,
+                placeholder="企业微信机器人 Secret",
+                runtime_key={"openclaw": "secret", "nanobot": "secret"},
+            ),
+            FieldDef(
+                key="websocketUrl", label="WebSocket URL（长连接地址）", type="string", required=False,
+                placeholder="默认 wss://openws.work.weixin.qq.com",
+                runtime_key={"openclaw": "websocketUrl"},
+            ),
+            FieldDef(
+                key="corpId", label="Corp ID（企业 ID）", type="string", required=False,
+                placeholder="主动发送回退可选",
+                runtime_key={"openclaw": "corpId"},
+            ),
+            FieldDef(
+                key="corpSecret", label="Corp Secret（企业密钥）", type="password", required=False,
+                placeholder="主动发送回退可选",
+                runtime_key={"openclaw": "corpSecret"},
+            ),
+            FieldDef(
+                key="agentId", label="Agent ID（应用 ID）", type="string", required=False,
+                placeholder="主动发送回退可选",
+                runtime_key={"openclaw": "agentId"},
+            ),
+            FieldDef(
+                key="allowFrom", label="Allow From（允许列表）", type="string_list",
+                required=False,
+                runtime_key={"nanobot": "allowFrom"},
+            ),
+            FieldDef(
+                key="dmPolicy", label="DM Policy（私聊策略）", type="select",
+                required=False, default="open",
+                options=(
+                    {"value": "open", "label": "open（所有人可用）"},
+                    {"value": "allowlist", "label": "allowlist（白名单）"},
+                    {"value": "disabled", "label": "disabled（禁用私聊）"},
+                ),
+                runtime_key={"openclaw": "dmPolicy", "nanobot": "dmPolicy"},
+            ),
+            FieldDef(
+                key="groupPolicy", label="Group Policy（群聊策略）", type="select",
+                required=False, default="open",
+                options=(
+                    {"value": "open", "label": "open（开放）"},
+                    {"value": "allowlist", "label": "allowlist（白名单）"},
+                    {"value": "disabled", "label": "disabled（禁用群聊）"},
+                ),
+                runtime_key={"openclaw": "groupPolicy", "nanobot": "groupPolicy"},
+            ),
+        ),
+    ),
 }
 
 
