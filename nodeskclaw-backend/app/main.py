@@ -352,7 +352,7 @@ async def lifespan(app: FastAPI):
             async with async_session_factory() as _seed_db:
                 import pathlib
                 import json as _seed_json
-                from app.models.gene import Genome as _SeedGenome
+                from app.models.gene import Gene as _SeedGene, Genome as _SeedGenome
                 from app.models.base import not_deleted as _seed_not_deleted
                 from app.startup.builtin_skills import seed_builtin_skills
 
@@ -360,12 +360,75 @@ async def lifespan(app: FastAPI):
 
                 await seed_builtin_skills(async_session_factory)
 
+                _gene_files = [
+                    "mcp_blackboard_tools.json",
+                    "mcp_proposals.json",
+                    "mcp_gene_discovery.json",
+                    "mcp_performance_reader.json",
+                    "mcp_topology_awareness.json",
+                    "mcp_shared_files.json",
+                    "meta_gene_ai_hc.json",
+                    "meta_gene_reorg.json",
+                    "meta_gene_culture.json",
+                    "meta_gene_self_improve.json",
+                    "meta_gene_innovation.json",
+                    "meta_gene_akr_decomposer.json",
+                    "content_topic_editor.json",
+                    "content_writer.json",
+                    "content_reviewer.json",
+                    "content_distributor.json",
+                ]
                 _genome_files = [
                     "genome_self_management.json",
                     "genome_ai_employee_basics.json",
                     "workflow_genome_example.json",
                     "genome_content_media_studio.json",
                 ]
+
+                _seeded_genes = 0
+                _updated_genes = 0
+                for _fname in _gene_files:
+                    _tpl_path = _seed_dir / _fname
+                    if not _tpl_path.exists():
+                        continue
+                    _tpl = _seed_json.loads(_tpl_path.read_text())
+                    _slug = _tpl["slug"]
+
+                    _manifest = _tpl.get("manifest", {})
+                    if "scripts" in _manifest and isinstance(_manifest["scripts"], list):
+                        _scripts_dict = {}
+                        _scripts_dir = _seed_dir.parent / "gene_scripts"
+                        for _sname in _manifest["scripts"]:
+                            _spath = _scripts_dir / _sname
+                            if _spath.exists():
+                                _scripts_dict[_sname] = _spath.read_text()
+                            else:
+                                logger.warning("Seed missing script: %s for %s", _sname, _slug)
+                        _manifest["scripts"] = _scripts_dict
+
+                    _existing = (await _seed_db.execute(
+                        select(_SeedGene).where(_SeedGene.slug == _slug, _seed_not_deleted(_SeedGene))
+                    )).scalar_one_or_none()
+                    if _existing is None:
+                        _seed_db.add(_SeedGene(
+                            name=_tpl["name"],
+                            slug=_slug,
+                            description=_tpl.get("description"),
+                            category=_tpl.get("category"),
+                            tags=_seed_json.dumps(_tpl.get("tags", []), ensure_ascii=False),
+                            source="official",
+                            version="1.0.0",
+                            manifest=_seed_json.dumps(_manifest, ensure_ascii=False),
+                            is_published=True,
+                            review_status="approved",
+                            source_registry="local",
+                        ))
+                        _seeded_genes += 1
+                    else:
+                        _new_manifest = _seed_json.dumps(_manifest, ensure_ascii=False)
+                        if _existing.manifest != _new_manifest:
+                            _existing.manifest = _new_manifest
+                            _updated_genes += 1
 
                 _seeded_genomes = 0
                 _updated_genomes = 0
@@ -400,14 +463,14 @@ async def lifespan(app: FastAPI):
                             _existing.description = _new_desc
                             _updated_genomes += 1
 
-                if _seeded_genomes or _updated_genomes:
+                if _seeded_genes or _seeded_genomes or _updated_genes or _updated_genomes:
                     await _seed_db.commit()
                     logger.info(
-                        "种子基因组导入完成: %d 新增 + %d 更新 genome",
-                        _seeded_genomes, _updated_genomes,
+                        "种子基因导入完成: %d 新增 + %d 更新 gene, %d 新增 + %d 更新 genome",
+                        _seeded_genes, _updated_genes, _seeded_genomes, _updated_genomes,
                     )
                 else:
-                    logger.info("种子基因组检查完成，无需导入或更新（均已是最新）")
+                    logger.info("种子基因检查完成，无需导入或更新（均已是最新）")
         except Exception as _seed_err:
             logger.warning("种子基因导入失败: %s", _seed_err)
 
